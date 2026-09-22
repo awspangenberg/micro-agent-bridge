@@ -10,7 +10,7 @@ for name in ('micro-agent-bridge-observer','micro-agent-bridge'):
  observer=name.endswith('observer');other='micro-agent-bridge' if observer else 'micro-agent-bridge-observer'
  deps='python3 (>= 3.10), openssh-client, ca-certificates, libc6 (>= 2.35), libstdc++6, procps'
  if not observer:deps+=', python3-gi, python3-pyatspi, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, xdg-utils'
- (control/'control').write_text(f'Package: {name}\nVersion: {version}\nArchitecture: amd64\nMaintainer: Micro Agent Bridge contributors <noreply@users.noreply.github.com>\nDepends: {deps}\nConflicts: {other}\nReplaces: {other}\nSection: utils\nPriority: optional\nHomepage: https://github.com/awspangenberg/micro-agent-bridge\nDescription: Independent Claude and mixed task layers for Codex Micro\n Per-user setup required; no hooks or startup entries enabled by package installation.\n')
+ (control/'control').write_text(f'Package: {name}\nVersion: {version}\nArchitecture: amd64\nMaintainer: awspangenberg <16296290+awspangenberg@users.noreply.github.com>\nDepends: {deps}\nConflicts: {other}\nReplaces: {other}\nSection: utils\nPriority: optional\nHomepage: https://github.com/awspangenberg/micro-agent-bridge\nDescription: Independent Claude and mixed task layers for Codex Micro\n Per-user setup required; no hooks or startup entries enabled by package installation.\n')
  pre=control/'preinst'
  pre.write_text('#!/bin/sh\nset -eu\nif [ "${1:-}" = upgrade ] && command -v pgrep >/dev/null && pgrep -f "[/]usr/lib/micro-agent-bridge/src/daemon.mjs" >/dev/null; then\n echo "Stop Micro Agent Bridge for all active users before upgrading." >&2\n exit 1\nfi\n')
  pre.chmod(0o755)
