@@ -9,8 +9,10 @@ import {CodexStatus} from './codex-ipc.mjs';
 import {ROOT,STATE,PY,config as loadConfig,atomic,env} from './paths.mjs';
 import {presence,claudeSupported as supportsClaude,openRoute,menuCommand} from './platform.mjs';
 import {Remotes} from './remotes.mjs';
+import {acquireLock} from './lock.mjs';
 fs.mkdirSync(STATE,{recursive:true,mode:0o700});
 const config=loadConfig(), remotes=new Remotes(config.hosts);
+const releaseLock=acquireLock(STATE+'/daemon.pid');
 const log=x=>fs.appendFileSync(STATE+'/events.jsonl',JSON.stringify({at:new Date().toISOString(),...x})+'\n',{mode:0o600});
 const run=(file,args,timeout=4000)=>new Promise((resolve,reject)=>execFile(file,args,{timeout,maxBuffer:1024*1024,env:env()},(e,out)=>e?reject(e):resolve(out)));
 let saved;try{saved=JSON.parse(fs.readFileSync(STATE+'/assignments.json'))}catch{}
@@ -135,7 +137,6 @@ const timer=setInterval(()=>{
  if(!statusBusy&&transportReady&&now-lastPoll>2000){statusBusy=true;lastPoll=now;transportCall('status').then(s=>{const layer=s.layer_index;if(currentLayer!==null&&layer!==currentLayer)invalid('layer-changed');currentLayer=layer;}).catch(()=>{}).finally(()=>statusBusy=false);}
  paint();publish();
 },250);
-async function stop(){if(stopping)return;stopping=true;clearInterval(timer);invalid('helper-stop');codex.close();remotes.close();ui?.stdin.end();atomic(STATE+'/claude-allowlist.json',{timestamp:0,ids:[]});const restore=fs.existsSync(STATE+'/restore-on-stop');try{const result=await transportCall('stop',{restore},25000);log({stopped:true,result});if(restore&&result.restoration?.restored)fs.unlinkSync(STATE+'/restore-on-stop');}catch(e){log({stop_error:e.message});}transport?.destroy();try{fs.unlinkSync(STATE+'/daemon.pid')}catch{}process.exit(0);}
+async function stop(){if(stopping)return;stopping=true;clearInterval(timer);invalid('helper-stop');codex.close();remotes.close();ui?.stdin.end();atomic(STATE+'/claude-allowlist.json',{timestamp:0,ids:[]});const restore=fs.existsSync(STATE+'/restore-on-stop');try{const result=await transportCall('stop',{restore},25000);log({stopped:true,result});if(restore&&result.restoration?.restored)fs.unlinkSync(STATE+'/restore-on-stop');}catch(e){log({stop_error:e.message});}transport?.destroy();releaseLock();process.exit(0);}
 process.on('SIGTERM',stop);process.on('SIGINT',stop);process.on('uncaughtException',e=>{log({fatal:e.message});stop();});
-if(fs.existsSync(STATE+'/daemon.pid')){const pid=Number(fs.readFileSync(STATE+'/daemon.pid'));try{process.kill(pid,0);throw Error('Mixed helper already running')}catch(e){if(e.code!=='ESRCH')throw e;}}
-fs.writeFileSync(STATE+'/daemon.pid',String(process.pid),{mode:0o600});codex.update(assignment.slots.filter(t=>t?.provider==='codex'));log({started:true,pid:process.pid});
+codex.update(assignment.slots.filter(t=>t?.provider==='codex'));log({started:true,pid:process.pid});
