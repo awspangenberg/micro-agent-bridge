@@ -46,6 +46,6 @@ packages. Candidate builds and source-only publication do not meet that release 
 
 Publication checks: staged source and Git history secret scans passed; personal
 paths, private host addresses, live task IDs and private runtime files are excluded.
-The Node SDK was removed from payloads; it is not required at runtime. Only neutral
-project contributor identity is used in Git commits. Package source references the
-public repository owner intentionally.
+The Node SDK was removed from payloads; it is not required at runtime. Only the
+repository owner's GitHub username and GitHub no-reply address are used in Git
+commits. Package source references the public repository owner intentionally.
