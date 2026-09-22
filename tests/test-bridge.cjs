@@ -1,7 +1,7 @@
 const fs=require('fs'),os=require('os'),path=require('path'),net=require('net'),vm=require('vm'),assert=require('assert/strict'),{EventEmitter}=require('events');
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'micro-native-check-'));
 fs.mkdirSync(dir+'/.codex/tmp/micro-native-20260921',{recursive:true});
-const baseline=Buffer.from(JSON.stringify({linkedApps:[],profiles:[{id:0,layers:[0,1,2].map(id=>({id,name:'Layer '+(id+1),layout:{keymap:[['KC_NONE','KC_NONE'],Array(4).fill('KC_NONE'),Array(4).fill('KC_NONE'),Array(3).fill('KC_NONE')],encoders:[['KC_NONE','KC_NONE','KC_NONE']],joystick:{type:'RADIAL',sectors:[]}}}))}]}));
+const baseline=Buffer.from(JSON.stringify({linkedApps:[],profiles:[{id:0,layers:(process.argv.includes('--missing')?[0]:[0,1,2]).map(id=>({id,name:'Layer '+(id+1),layout:{keymap:[['KC_NONE','KC_NONE'],Array(4).fill('KC_NONE'),Array(4).fill('KC_NONE'),Array(3).fill('KC_NONE')],encoders:[['KC_NONE','KC_NONE','KC_NONE']],joystick:{type:'RADIAL',sectors:[]}}}))}]}));
 let profile=Buffer.from(baseline),working=Buffer.alloc(0),inputRunning=false,inspectorOpen=false,writeDelay=0;const calls=[];
 class HIDAsync extends EventEmitter {
  constructor(){super();this.readStarts=0;this.reading=false;this.on('newListener',event=>{if(event==='data')process.nextTick(()=>this.resume())});this.on('removeListener',event=>{if(event==='data'&&this.listenerCount('data')===0)this.reading=false})}
@@ -25,8 +25,18 @@ async function request(method,extra={}){const socket=net.connect(bridge.socketPa
 (async()=>{
  try {
   const recover=false,claudeLayer=process.argv.includes('--claude'),persistent=claudeLayer||process.argv.includes('--persistent');
-  bridge=await box.module.exports(service,dir+'/evidence',recover?{recoverStoppedTrial:true}:{persistent});
+  bridge=await box.module.exports(service,dir+'/evidence',recover?{recoverStoppedTrial:true}:{persistent:process.argv.includes('--missing')||persistent,claudeLayer:process.argv.includes('--missing'),takeoverLayers:process.argv.includes('--missing')?[]:undefined});
   for(let i=0;i<50&&!bridge.health().prepared;i++)await new Promise(r=>setTimeout(r,100));assert.equal(bridge.health().prepared,true);
+  if(process.argv.includes('--missing')){
+    const layers=JSON.parse(profile).profiles[0].layers;
+    assert.deepEqual(layers.map(x=>x.id).sort(),[0,1,2]);
+    assert.deepEqual(layers.find(x=>x.id===0),JSON.parse(baseline).profiles[0].layers[0]);
+    assert.equal(layers.find(x=>x.id===1).layout.keymap[0][0],'KV_OAI_AG06');
+    assert.equal(layers.find(x=>x.id===2).layout.keymap[0][0],'KV_OAI_AG12');
+    const result=await request('stop',{restore:true});assert.equal(result.result.restoration.restored,true);
+    assert.deepEqual(JSON.parse(profile),JSON.parse(baseline));
+    console.log('Missing custom layers created and restored without changing native layer');return;
+  }
   const saved=JSON.parse(baseline),mapped=JSON.parse(profile);assert.deepEqual(mapped.profiles[0].layers.slice(0,2),saved.profiles[0].layers.slice(0,2));assert.equal(mapped.profiles[0].layers[2].layout.keymap[0][0],'KV_OAI_AG12');
   if(claudeLayer){
     const mixedBefore=JSON.parse(profile).profiles[0].layers[2];await request('stop');

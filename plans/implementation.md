@@ -19,3 +19,33 @@ Tests: allocation/overflow/pin changes/new tasks/duplicate titles/local+remote/s
 Orchestration: sequential Codex implementation/research/review; shared physical device.  No subagents.
 
 Prior trial correction: user confirmed Claude layer2 selection and live pins work; Mixed/native layers work. Advanced actions and full recovery qualification remain incomplete. Existing installations remain intact during packaging.
+
+## Implementation checkpoint
+
+Portable source, CLI, guided setup windows, shared recent-pin logic, multi-host SSH
+observer supervision, scoped hook ownership, migration recovery, and rollback are
+implemented. Source is public; no stable release tag exists. Existing working
+installations have not been replaced.
+
+Prebuilt desktop/observer Debian candidates passed clean-user install, repeated
+setup, configuration, hook removal, reinstall, role-package replacement, and removal
+on Ubuntu 24.04 and 26.04. The Linux setup window rendered in a virtual display.
+Node allocation/status/config/transaction tests, Python metadata/hook tests, and
+simulated HID isolation/ownership/recovery tests passed. Missing custom layers are
+created and restored while preserving the native layer. These checks are not
+physical Linux acceptance.
+
+The Apple Silicon application compiled with bundled Node/Python; runtime import
+checks passed. Signing and notarization remain blocked on credential access and
+publication consent for the certificate identity. The compiled portable Mac app
+still requires full end-to-end acceptance.
+
+Linux physical testing is explicitly deferred by the requester. Version 1.0 is held
+until those gates pass; it must include the notarized DMG and self-contained Ubuntu
+packages. Candidate builds and source-only publication do not meet that release gate.
+
+Publication checks: staged source and Git history secret scans passed; personal
+paths, private host addresses, live task IDs and private runtime files are excluded.
+The Node SDK was removed from payloads; it is not required at runtime. Only neutral
+project contributor identity is used in Git commits. Package source references the
+public repository owner intentionally.
