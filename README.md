@@ -14,8 +14,8 @@ Do not interpret a package building successfully as hardware qualification.
 
 [**Download v1.0.0-rc.1**](https://github.com/awspangenberg/micro-agent-bridge/releases/tag/v1.0.0-rc.1)
 
-- [Ubuntu desktop installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/micro-agent-bridge_1.0.0%7Erc1_amd64.deb)
-- [Ubuntu SSH observer installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/micro-agent-bridge-observer_1.0.0%7Erc1_amd64.deb)
+- [Ubuntu desktop installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/micro-agent-bridge_1.0.0-rc.1_amd64.deb)
+- [Ubuntu SSH observer installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/micro-agent-bridge-observer_1.0.0-rc.1_amd64.deb)
 - [SHA256 checksums](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/SHA256SUMS)
 
 These are prebuilt Ubuntu 24.04/26.04 x86-64 evaluation packages. Clean-machine

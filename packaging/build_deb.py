@@ -20,7 +20,8 @@ for name in ('micro-agent-bridge-observer','micro-agent-bridge'):
  if not observer:
   desktop=base/'usr/share/applications/micro-agent-bridge.desktop';desktop.parent.mkdir(parents=True)
   desktop.write_text('[Desktop Entry]\nType=Application\nName=Micro Agent Bridge\nComment=Configure Claude and mixed keyboard layers\nExec=/usr/bin/python3 /usr/lib/micro-agent-bridge/src/setup_linux.py\nIcon=input-keyboard\nTerminal=false\nCategories=Utility;\n')
- output=dist/f'{name}_{version}_amd64.deb';candidate=build/(output.name+'.next')
+ # Keep Debian's tilde inside package metadata; GitHub renames tildes in asset filenames.
+ output=dist/f'{name}_{VERSION}_amd64.deb';candidate=build/(output.name+'.next')
  subprocess.run(['dpkg-deb','--root-owner-group','--build',str(base),str(candidate)],check=True)
  candidate.replace(output)
 sums(dist)
