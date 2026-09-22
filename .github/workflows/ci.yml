@@ -1,0 +1,21 @@
+name: Verify
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - run: npm run check
+      - run: python3 -m py_compile src/*.py packaging/*.py
+      - run: python3 packaging/build_deb.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unqualified-ubuntu-packages
+          path: dist/
+# Publication is deliberately manual after physical qualification and notarization.

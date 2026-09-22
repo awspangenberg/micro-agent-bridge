@@ -1,0 +1,6 @@
+{
+ "version":1,
+ "nodeDarwin":{"url":"https://nodejs.org/dist/v22.23.2/node-v22.23.2-darwin-arm64.tar.gz","sha256":"61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"},
+ "nodeLinux":{"url":"https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.xz","sha256":"d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307"},
+ "pythonDarwin":{"url":"https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-install_only_stripped.tar.gz","sha256":"81a359f1cfadd4da11766534c5913791cea55f26e1bb902cacd2a531bb1e4b2b"}
+}

@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "firmware": [
+    "0.6.2"
+  ],
+  "adapters": [
+    {
+      "platform": "darwin",
+      "arch": "arm64",
+      "provider": "codex",
+      "version": "26.915.31945",
+      "build": "9922",
+      "asarSHA256": "1f7939c1c781887c167043c4d1d307af3400d324685cfc315dfe2f80e634f483",
+      "module": ".vite/build/service-C6nm9ayu.js",
+      "qualification": "prior-helper-only"
+    },
+    {
+      "platform": "linux",
+      "arch": "x64",
+      "provider": "codex",
+      "version": "26.915.31945",
+      "asarSHA256": "8889a6e9aeba678a5d77876bcc9cfce3168ab47cc7bb4ba5856f80a3a32157a8",
+      "module": ".vite/build/service-C6nm9ayu.js",
+      "qualification": "candidate-unvalidated"
+    }
+  ],
+  "claude": [
+    {
+      "platform": "darwin",
+      "version": "2.2553.1",
+      "qualification": "prior-helper-only"
+    },
+    {
+      "platform": "linux",
+      "version": "2.2553.1",
+      "qualification": "candidate-unvalidated"
+    }
+  ],
+  "linuxDesktop": {
+    "qualified": false,
+    "reason": "Native transport, exact navigation, pins and GNOME accessibility require physical validation against a clean upstream build"
+  }
+}

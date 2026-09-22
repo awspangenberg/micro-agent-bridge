@@ -1,0 +1,1 @@
+{"name":"micro-agent-bridge","version":"1.0.0-rc.1","private":true,"type":"module","license":"MIT","engines":{"node":">=22"},"scripts":{"test":"node --test tests/*.mjs && python3 tests/test-claude.py && python3 tests/test-hooks.py && node tests/test-bridge.cjs --claude","check":"node scripts/check-release.mjs","build:deb":"python3 packaging/build_deb.py"}}
