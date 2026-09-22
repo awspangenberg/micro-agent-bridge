@@ -3,6 +3,13 @@
 There is no qualified v1.0 release yet. The commands below describe the packaged
 workflow; unsupported app builds fail preflight without changing the keyboard.
 
+Prebuilt Ubuntu evaluation packages are available in
+[v1.0.0-rc.1](https://github.com/awspangenberg/micro-agent-bridge/releases/tag/v1.0.0-rc.1).
+Download one `.deb` and `SHA256SUMS` from the release's Assets section. Verify the
+selected download with `sha256sum --ignore-missing --check SHA256SUMS` in the
+download directory. Normal Linux desktop startup remains blocked by pending
+hardware qualification. The Mac DMG is not yet published.
+
 ## Mac
 
 Download the signed/notarized ARM64 DMG, verify its checksum, and drag **Micro
@@ -28,7 +35,7 @@ The CLI is inside the application:
 Download the desktop `.deb`. It contains the helper runtime and observer capability; no second download is needed:
 
 ```sh
-sudo apt install ./micro-agent-bridge_1.0.0_amd64.deb
+sudo apt install ./micro-agent-bridge_1.0.0~rc1_amd64.deb
 ```
 
 Open Micro Agent Bridge from the application menu. Configure, check compatibility,
@@ -57,6 +64,7 @@ account passwords or tokens.
 Install the observer-only package on each headless Ubuntu host and run as the coding user. Desktop and observer-only packages are alternatives, not co-installed dependencies:
 
 ```sh
+sudo apt install ./micro-agent-bridge-observer_1.0.0~rc1_amd64.deb
 micro-agent-bridge setup --role observer --defaults
 micro-agent-bridge doctor
 ```

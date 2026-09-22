@@ -49,3 +49,11 @@ paths, private host addresses, live task IDs and private runtime files are exclu
 The Node SDK was removed from payloads; it is not required at runtime. Only the
 repository owner's GitHub username and GitHub no-reply address are used in Git
 commits. Package source references the public repository owner intentionally.
+
+## Download publication
+
+The requester explicitly asked for downloadable packages while platform gates remain
+open. Publish the self-contained Ubuntu candidates as v1.0.0-rc.1, marked prerelease
+and not latest, with checksums, license, dependency notices and compatibility report.
+Verify public anonymous download checksums. This does not qualify Linux desktop or
+clear the stable v1.0/Mac signing and hardware acceptance gates.

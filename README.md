@@ -10,7 +10,25 @@ The original macOS helper demonstrated the three layers. Portable installers,
 Linux desktop behavior, and recovery require separate release acceptance.
 Do not interpret a package building successfully as hardware qualification.
 
-## Planned prebuilt downloads
+## Download the prerelease
+
+[**Download v1.0.0-rc.1**](https://github.com/awspangenberg/micro-agent-bridge/releases/tag/v1.0.0-rc.1)
+
+- [Ubuntu desktop installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/micro-agent-bridge_1.0.0%7Erc1_amd64.deb)
+- [Ubuntu SSH observer installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/micro-agent-bridge-observer_1.0.0%7Erc1_amd64.deb)
+- [SHA256 checksums](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/SHA256SUMS)
+
+These are prebuilt Ubuntu 24.04/26.04 x86-64 evaluation packages. Clean-machine
+installation tests passed; physical Linux keyboard acceptance remains pending.
+Normal desktop startup stays disabled until qualification. The observer package
+supplies SSH reporting without a desktop or keyboard. Install one package per host.
+
+The Mac DMG is not available yet: signing/notarization and portable Mac acceptance
+remain release blockers. Version 1.0 will include the Mac installer when those gates
+pass. Downloads live in **Releases → Assets**; the separate GitHub Packages registry
+does not host Debian or DMG installers.
+
+## Planned v1.0 downloads
 
 - `Micro-Agent-Bridge-1.0.0-macOS-arm64.dmg`: signed, notarized Apple Silicon app,
   macOS 14+ subject to desktop-app requirements, bundled helper runtimes.

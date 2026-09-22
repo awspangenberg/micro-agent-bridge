@@ -4,8 +4,8 @@ Version 1.0 requires prebuilt, downloadable Mac and Ubuntu installers. A source-
 release does not satisfy this project. Do not label an unqualified build v1.0.
 
 1. Run focused tests, syntax checks, publication scan, and gitleaks on source and Git
-   history. Review the staged diff and archive contents. Use neutral Git author
-   identity; exclude machine paths, host addresses, task IDs/titles and private logs.
+   history. Review the staged diff and archive contents. Use the repository owner's
+   GitHub no-reply identity; exclude machine paths, host addresses, task IDs/titles and private logs.
 2. Build Debian packages in clean Ubuntu 24.04 and 26.04 environments; install as a
    fresh non-root user. Test observer setup, repeat setup, hook preservation/removal,
    alternate paths, migration, package upgrade/rollback/reinstall/removal.
@@ -32,3 +32,14 @@ release does not satisfy this project. Do not label an unqualified build v1.0.
 The Linux native transport qualification, Mac notarization credentials, and physical
 multi-platform acceptance are current blockers. Source CI must not publish releases
 merely because unit tests pass.
+
+## Evaluation prereleases
+
+Prebuilt evaluation packages may be published manually as a GitHub prerelease
+before physical qualification. Explicitly name every unmet gate in the release
+notes and retain runtime qualification checks. Do not mark these releases stable
+or latest, and do not include an unsigned/unnotarized Mac DMG. Attach the built
+packages, SHA256SUMS, license, dependency notices and compatibility report. Verify
+anonymous downloads and their checksums after publication. GitHub Actions artifacts
+alone are not public installer delivery. Debian and DMG files belong in Release
+Assets, not the GitHub Packages registry.
