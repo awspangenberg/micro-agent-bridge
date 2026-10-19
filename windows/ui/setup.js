@@ -264,7 +264,8 @@ on(message => {
 enter.prefs = async () => {
   caption('');
   device.ring('steady', COLORS.codex); device.keysAll(LAYER_LIGHTS[2]);
-  $('#pref-startup').checked = env.startup ?? true;
+  // First onboarding suggests starting with Windows; setting up again shows the current choice.
+  $('#pref-startup').checked = env.onboarded ? !!env.startup : true;
   $('#pref-alerts').checked = env.alerts ?? true;
   $('#pref-hooks').checked = !!env.hooks;
 };

@@ -29,7 +29,7 @@ checks live state, so you can close setup and reopen it later from the Start men
    connection is present, and explains a doubled USB+Bluetooth connection.
 3. **Control:** shows whether Codex and Work Louder Input are running, offers to
    quit them (force quit only on request), then opens the Micro exclusively once
-   (`status`) and reads its firmware version.
+   (`status`) to confirm nothing else holds it.
 4. **Map:** explains what changes, asks for consent, then backs up the profile and
    maps the task rows (`setup-profile --consent`). An already mapped Micro is
    detected. Linked-app mappings, an interrupted mapping and a different device

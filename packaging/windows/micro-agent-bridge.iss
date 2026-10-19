@@ -50,6 +50,15 @@ Type: filesandordirs; Name: "{app}\runtime"
 Type: filesandordirs; Name: "{app}\docs"
 Type: filesandordirs; Name: "{app}\bin"
 Type: filesandordirs; Name: "{app}\ui"
+; Console shortcuts from rc.3 and earlier; the app replaces them (a second host would fight it for the Micro).
+Type: files; Name: "{group}\Start Micro host.lnk"
+Type: files; Name: "{group}\First-run setup (configure profile).lnk"
+Type: files; Name: "{group}\Doctor.lnk"
+Type: files; Name: "{group}\Device status.lnk"
+Type: files; Name: "{group}\Restore keyboard profile.lnk"
+Type: files; Name: "{group}\Enable Claude status hooks.lnk"
+Type: files; Name: "{group}\Remove Claude status hooks.lnk"
+Type: files; Name: "{group}\Windows guide.url"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
