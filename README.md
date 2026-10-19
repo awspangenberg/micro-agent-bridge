@@ -12,12 +12,12 @@ Do not interpret a package building successfully as hardware qualification.
 
 ## Download the prerelease
 
-[**Download v1.0.0-rc.2**](https://github.com/awspangenberg/micro-agent-bridge/releases/tag/v1.0.0-rc.2)
+[**Download v1.0.0-rc.3**](https://github.com/awspangenberg/micro-agent-bridge/releases/tag/v1.0.0-rc.3)
 
-- [Ubuntu desktop installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.2/micro-agent-bridge_1.0.0-rc.2_amd64.deb)
-- [Ubuntu SSH observer installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.2/micro-agent-bridge-observer_1.0.0-rc.2_amd64.deb)
-- [Windows x64 installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.2/Micro-Agent-Bridge-1.0.0-rc.2-windows-x64-setup.exe) (standalone Micro host, per-user, unsigned)
-- [SHA256 checksums](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.2/SHA256SUMS)
+- [Ubuntu desktop installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.3/micro-agent-bridge_1.0.0-rc.3_amd64.deb)
+- [Ubuntu SSH observer installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.3/micro-agent-bridge-observer_1.0.0-rc.3_amd64.deb)
+- [Windows x64 installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.3/Micro-Agent-Bridge-1.0.0-rc.3-windows-x64-setup.exe) (standalone Micro host, per-user, unsigned)
+- [SHA256 checksums](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.3/SHA256SUMS)
 
 The Windows installer bundles Node.js and Python and needs no administrator
 access; see [Windows](docs/windows.md#install). It is not Authenticode-signed, so

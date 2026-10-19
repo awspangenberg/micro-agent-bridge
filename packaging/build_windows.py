@@ -9,11 +9,13 @@ if build.exists():shutil.rmtree(build)
 app.mkdir(parents=True);payload(app)
 runtime('nodeWindows',app/'runtime/node');runtime('pythonWindows',app/'runtime/python')
 # The host scripts use only the standard library; drop package tooling, Tk, IDLE and tests.
-for name in ('Lib/site-packages/pip','Lib/ensurepip','Lib/idlelib','Lib/tkinter','Lib/turtledemo','Lib/test','tcl','Scripts'):
+for name in ('Lib/site-packages/pip','Lib/ensurepip','Lib/idlelib','Lib/tkinter','Lib/turtledemo','Lib/test','tcl','Scripts','libs','include'):
  if (app/'runtime/python'/name).exists():shutil.rmtree(app/'runtime/python'/name)
 for item in (app/'runtime/python/Lib/site-packages').glob('pip-*'):shutil.rmtree(item)
 for item in (app/'runtime/python/DLLs').glob('*'):
  if item.name.lower().startswith(('_tkinter','tcl','tk')):item.unlink()
+# Ship the standard library's bytecode so running the host writes no untracked caches under the install.
+subprocess.run([str(app/'runtime/python/python.exe'),'-I','-m','compileall','-q','-j','0',str(app/'runtime/python/Lib')],check=True)
 # Production dependencies only (node-hid for device enumeration), resolved from the lockfile.
 deps=build/'deps';deps.mkdir()
 for name in ('package.json','package-lock.json'):shutil.copy2(ROOT/name,deps/name)
@@ -32,6 +34,7 @@ shutil.copy2(ROOT/'package.json',app/'package.json')
 (app/'bin/micro-agent-bridge.cmd').write_text(newline='\r\n',data='''@echo off
 setlocal
 set "MAB_ROOT=%~dp0.."
+set "PYTHONDONTWRITEBYTECODE=1"
 if /i "%~1"=="hooks" goto hooks
 "%MAB_ROOT%\\runtime\\node\\node.exe" "%MAB_ROOT%\\src\\standalone-control.mjs" %* --python "%MAB_ROOT%\\runtime\\python\\python.exe"
 exit /b %errorlevel%

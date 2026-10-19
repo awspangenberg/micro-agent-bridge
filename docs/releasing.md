@@ -40,8 +40,11 @@ Inno Setup 6. It bundles the pinned Node.js and Python runtimes, stages `node-hi
 with only its win32-x64 prebuild, smoke-loads the CLI, and writes
 `Micro-Agent-Bridge-<version>-windows-x64-setup.exe`. Before publishing, do a
 silent per-user install into a temporary directory, run `doctor` with no system
-Node.js or Python on PATH, and confirm that uninstall removes the program files,
-the Run and PATH entries, and owned hooks, and keeps the state directory.
+Node.js or Python on PATH, and confirm that uninstall removes the program files
+and the Run and PATH entries, and keeps the state directory. Also install hooks
+(`micro-agent-bridge hooks install`) with `USERPROFILE`, `LOCALAPPDATA` and
+`APPDATA` pointed at a temporary profile, uninstall with the same environment,
+and confirm that `settings.json` keeps only its other settings.
 
 The installer is not Authenticode-signed. List that as an unmet gate, along with
 the hardware items still open under Validation in `docs/windows.md`. Build every

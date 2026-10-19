@@ -64,13 +64,12 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{cmd}"" /c start ""{#AppName}"" /min ""{#Launcher}"" start --supervise"; Tasks: startup; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#AppName}"; Tasks: not startup; Flags: deletevalue
 
-[UninstallRun]
-; Remove only hooks this package installed; leave settings.json untouched otherwise.
-Filename: "{app}\runtime\python\python.exe"; Parameters: "-B -I ""{app}\src\claude_hooks.py"" --remove --state ""{#StateBase}\standalone"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveClaudeHooks"; Check: OwnedHooksInstalled
-
 [UninstallDelete]
-; Python caches created at run time. The state directory (profile backups) is kept for restore.
-Type: filesandordirs; Name: "{app}"
+; The standard library is precompiled at build time; Claude hook runs may still cache src modules.
+; Only paths this package owns are removed. The state directory (profile backups) is kept for restore.
+Type: filesandordirs; Name: "{app}\src\__pycache__"
+Type: dirifempty; Name: "{app}\src"
+Type: dirifempty; Name: "{app}"
 
 [Code]
 const
@@ -110,9 +109,18 @@ begin
   Result := not RefuseWhileRunning();
 end;
 
-function OwnedHooksInstalled(): Boolean;
+// Removes only hooks this package installed, and only when its ownership record exists, so
+// settings.json is untouched otherwise. Decided at uninstall time ([UninstallRun] Check runs at install).
+procedure RemoveOwnedHooks();
+var
+  Code: Integer;
 begin
-  Result := FileExists(ExpandConstant('{#StateBase}\standalone\hook-command.json'));
+  if not FileExists(ExpandConstant('{#StateBase}\standalone\hook-command.json')) then Exit;
+  if not Exec(ExpandConstant('{app}\runtime\python\python.exe'),
+      ExpandConstant('-B -E -s "{app}\src\claude_hooks.py" --remove --state "{#StateBase}\standalone"'),
+      '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+    SuppressibleMsgBox('Claude status hooks could not be removed automatically. Remove the Micro Agent Bridge entries from ' +
+      ExpandConstant('{%USERPROFILE}') + '\.claude\settings.json.', mbError, MB_OK, IDOK);
 end;
 
 function PathWithout(Path, Dir: string): string;
@@ -157,5 +165,8 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if CurUninstallStep = usUninstall then SetUserPath(False);
+  if CurUninstallStep = usUninstall then begin
+    RemoveOwnedHooks();
+    SetUserPath(False);
+  end;
 end;
