@@ -46,6 +46,19 @@ if /i "%~2"=="install" (set "MAB_HOOKS=--install") else if /i "%~2"=="remove" (s
 "%MAB_ROOT%\\runtime\\python\\python.exe" "%MAB_ROOT%\\src\\claude_hooks.py" %MAB_HOOKS% --state "%LOCALAPPDATA%\\Micro Agent Bridge\\standalone"
 exit /b %errorlevel%
 ''')
+# Tray app and onboarding: a .NET Framework 4.8 exe hosting the local ui\ pages in WebView2.
+icon=build/'icon.ico'
+subprocess.run([sys.executable,str(ROOT/'packaging/windows/make_icon.py'),str(icon)],check=True)
+dotnet=shutil.which('dotnet')
+if not dotnet:raise SystemExit('The .NET SDK (dotnet) is required to build the tray app')
+published=build/'dotnet'
+subprocess.run([dotnet,'publish',str(ROOT/'windows/app/MicroAgentBridge.csproj'),'-c','Release','-o',str(published),'--nologo',
+ f'-p:Version={VERSION.split("-")[0]}',f'-p:InformationalVersion={VERSION}',f'-p:MabIcon={icon}'],check=True)
+for name in ('MicroAgentBridge.exe','MicroAgentBridge.exe.config','Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll'):
+ shutil.copy2(published/name,app/name)
+# The simulator only serves browser previews of the pages.
+shutil.copytree(ROOT/'windows/ui',app/'ui',ignore=shutil.ignore_patterns('simulator.js'))
+shutil.copy2(icon,app/'MicroAgentBridge.ico')
 # Loading the CLI imports node-hid and the HID transport without opening a device.
 subprocess.run([str(app/'runtime/node/node.exe'),'-e',"import('node-hid').then(h=>{if(typeof h.devicesAsync!=='function')process.exit(1)})"],cwd=app/'src',check=True)
 subprocess.run([str(app/'bin/micro-agent-bridge.cmd'),'--help'],check=True,stdout=subprocess.DEVNULL)
@@ -57,7 +70,7 @@ iscc=os.environ.get('ISCC') or next((str(p) for p in (
 if not iscc:raise SystemExit('Inno Setup 6 (ISCC.exe) not found; set ISCC')
 base=f'Micro-Agent-Bridge-{VERSION}-windows-x64-setup'
 numeric='.'.join((VERSION.split('-')[0].split('.')+['0']*4)[:4])
-subprocess.run([iscc,'/Qp',f'/DAppVersion={VERSION}',f'/DNumericVersion={numeric}',f'/DSourceDir={app}',f'/DOutputDir={dist}',f'/DOutputBase={base}',
+subprocess.run([iscc,'/Qp',f'/DAppVersion={VERSION}',f'/DNumericVersion={numeric}',f'/DSourceDir={app}',f'/DOutputDir={dist}',f'/DOutputBase={base}',f'/DIconFile={icon}',
  str(ROOT/'packaging/windows/micro-agent-bridge.iss')],check=True)
 sums(dist)
 print(dist/(base+'.exe'))

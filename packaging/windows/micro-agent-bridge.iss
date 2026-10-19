@@ -1,11 +1,13 @@
 ; Per-user Windows installer for the standalone Micro host. Built by packaging/build_windows.py,
-; which passes AppVersion, NumericVersion, SourceDir, OutputDir and OutputBase.
+; which passes AppVersion, NumericVersion, SourceDir, OutputDir, OutputBase and IconFile.
 #ifndef AppVersion
   #error Build with packaging/build_windows.py
 #endif
 #define AppName "Micro Agent Bridge"
+#define AppExe "{app}\MicroAgentBridge.exe"
 #define Launcher "{app}\bin\micro-agent-bridge.cmd"
 #define StateBase "{localappdata}\Micro Agent Bridge"
+#define RunKey "Software\Microsoft\Windows\CurrentVersion\Run"
 
 [Setup]
 AppId={{6C1D5E0B-4A8F-4F7B-9E52-3D0B7A1C9F24}
@@ -31,12 +33,14 @@ SolidCompression=yes
 WizardStyle=modern
 ChangesEnvironment=yes
 UninstallDisplayName={#AppName}
-UninstallDisplayIcon={sys}\main.cpl
+UninstallDisplayIcon={#AppExe}
+SetupIconFile={#IconFile}
 SetupLogging=yes
 
 [Tasks]
-Name: startup; Description: "Start the Micro host at sign-in (supervised; quit Codex and Work Louder Input first on the first run)"; Flags: unchecked
-Name: addpath; Description: "Add the micro-agent-bridge command to my PATH"; Flags: unchecked
+; Starting with Windows is chosen during onboarding, in the app.
+Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked
+Name: addpath; Description: "Add the micro-agent-bridge command line to my PATH"; Flags: unchecked
 
 [InstallDelete]
 ; Replace program files wholesale on upgrade. State, backups and ownership records live elsewhere.
@@ -45,35 +49,62 @@ Type: filesandordirs; Name: "{app}\node_modules"
 Type: filesandordirs; Name: "{app}\runtime"
 Type: filesandordirs; Name: "{app}\docs"
 Type: filesandordirs; Name: "{app}\bin"
+Type: filesandordirs; Name: "{app}\ui"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Start Micro host"; Filename: "{cmd}"; Parameters: "/k """"{#Launcher}"" start --supervise"""; WorkingDir: "{app}"; Comment: "Owns the Codex Micro until Ctrl+C"
-Name: "{group}\First-run setup (configure profile)"; Filename: "{cmd}"; Parameters: "/k """"{#Launcher}"" start --supervise --configure-profile --consent"""; WorkingDir: "{app}"; Comment: "Backs up the keyboard profile, maps task rows, then starts the host"
-Name: "{group}\Doctor"; Filename: "{cmd}"; Parameters: "/k """"{#Launcher}"" doctor"""; WorkingDir: "{app}"
-Name: "{group}\Device status"; Filename: "{cmd}"; Parameters: "/k """"{#Launcher}"" status"""; WorkingDir: "{app}"
-Name: "{group}\Restore keyboard profile"; Filename: "{cmd}"; Parameters: "/k """"{#Launcher}"" restore-profile"""; WorkingDir: "{app}"
-Name: "{group}\Enable Claude status hooks"; Filename: "{cmd}"; Parameters: "/k """"{#Launcher}"" hooks install"""; WorkingDir: "{app}"
-Name: "{group}\Remove Claude status hooks"; Filename: "{cmd}"; Parameters: "/k """"{#Launcher}"" hooks remove"""; WorkingDir: "{app}"
-Name: "{group}\Windows guide"; Filename: "https://github.com/awspangenberg/micro-agent-bridge/blob/v{#AppVersion}/docs/windows.md"
+Name: "{group}\{#AppName}"; Filename: "{#AppExe}"; Comment: "Your pinned Codex and Claude tasks on the Codex Micro"
+Name: "{group}\Set up {#AppName}"; Filename: "{#AppExe}"; Parameters: "--setup"; Comment: "Connect, map and test your Codex Micro"
+Name: "{group}\Troubleshooting\Doctor"; Filename: "{cmd}"; Parameters: "/k """"{#Launcher}"" doctor"""; WorkingDir: "{app}"
+Name: "{group}\Troubleshooting\Device status"; Filename: "{cmd}"; Parameters: "/k """"{#Launcher}"" status"""; WorkingDir: "{app}"
+Name: "{group}\Troubleshooting\Windows guide"; Filename: "https://github.com/awspangenberg/micro-agent-bridge/blob/v{#AppVersion}/docs/windows.md"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{#AppExe}"; Tasks: desktopicon
 
-[Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{cmd}"" /c start ""{#AppName}"" /min ""{#Launcher}"" start --supervise"; Tasks: startup; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#AppName}"; Tasks: not startup; Flags: deletevalue
+[Run]
+; New installs open onboarding; upgrades reopen the app as it was (dashboard and host).
+Filename: "{#AppExe}"; Description: "Open {#AppName}"; Flags: postinstall nowait skipifsilent
 
 [UninstallDelete]
 ; The standard library is precompiled at build time; Claude hook runs may still cache src modules.
-; Only paths this package owns are removed. The state directory (profile backups) is kept for restore.
+; Only paths this package owns are removed. The state directory (profile backups) is kept for restore;
+; the app's preferences and WebView cache go, so a reinstall starts with onboarding.
 Type: filesandordirs; Name: "{app}\src\__pycache__"
 Type: dirifempty; Name: "{app}\src"
 Type: dirifempty; Name: "{app}"
+Type: filesandordirs; Name: "{#StateBase}\webview"
+Type: files; Name: "{#StateBase}\app.json"
 
 [Code]
 const
   EnvKey = 'Environment';
+  AppMutex = 'Local\MicroAgentBridge.App';
+  WebView2Client = '\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+function WebView2Installed(): Boolean;
+var
+  V: string;
+begin
+  Result := (RegQueryStringValue(HKLM, 'SOFTWARE\WOW6432Node' + WebView2Client, 'pv', V) and (V <> '') and (V <> '0.0.0.0')) or
+            (RegQueryStringValue(HKCU, 'Software' + WebView2Client, 'pv', V) and (V <> '') and (V <> '0.0.0.0'));
+end;
+
+// Ask a running tray app to stop its host and exit, then wait for it to go.
+function CloseRunningApp(Exe: string): Boolean;
+var
+  Code, I: Integer;
+begin
+  Result := True;
+  if not CheckForMutexes(AppMutex) then Exit;
+  if FileExists(Exe) then Exec(Exe, '--quit', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  for I := 1 to 60 do begin
+    if not CheckForMutexes(AppMutex) then Exit;
+    Sleep(250);
+  end;
+  Result := False;
+end;
 
 function HostRunning(): Boolean;
 var
@@ -91,22 +122,75 @@ begin
     Result := Code = 3;
 end;
 
-function RefuseWhileRunning(): Boolean;
+// The tray app is closed for the user; a host started from a terminal must be stopped by them.
+function BusyMessage(Exe: string): string;
 begin
-  Result := HostRunning();
-  if Result then
-    SuppressibleMsgBox('The Micro host is running. Stop it with Ctrl+C in its window (this releases the keyboard), then run this again.',
-      mbError, MB_OK, IDOK);
+  Result := '';
+  if not CloseRunningApp(Exe) then
+    Result := 'Micro Agent Bridge is still running. Quit it from its notification-area icon, then run this again.'
+  else if HostRunning() then
+    Result := 'A Micro host started from a terminal is running. Stop it with Ctrl+C in its window (this releases the keyboard), then run this again.';
 end;
 
 function InitializeSetup(): Boolean;
 begin
-  Result := not RefuseWhileRunning();
+  Result := True;
+  if not WebView2Installed() then
+    Result := SuppressibleMsgBox('Micro Agent Bridge needs the Microsoft Edge WebView2 Runtime, which this PC does not seem to have.' + #13#10#13#10 +
+      'Windows 11 includes it. On Windows 10, install it from https://go.microsoft.com/fwlink/p/?LinkId=2124703 before opening the app.' + #13#10#13#10 +
+      'Continue installing?', mbConfirmation, MB_YESNO, IDYES) = IDYES;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := BusyMessage(ExpandConstant('{#AppExe}'));
+end;
+
+function ProfileMapped(): Boolean;
+var
+  Owned: AnsiString;
+begin
+  Result := LoadStringFromFile(ExpandConstant('{#StateBase}\standalone\standalone-profile-ownership.json'), Owned) and
+    (Pos('"state":"configured"', Owned) > 0);
+end;
+
+// Offer to put the original key mappings back while the bridge is still installed to do it.
+function OfferRestore(): Boolean;
+var
+  Code: Integer;
+begin
+  Result := True;
+  if UninstallSilent() or not ProfileMapped() then Exit;
+  case MsgBox('Restore your Micro''s original keyboard profile before uninstalling?' + #13#10#13#10 +
+      'Keep the Micro connected. Choose No to keep the task keys as they are; the backup stays in ' +
+      ExpandConstant('{#StateBase}') + '.', mbConfirmation, MB_YESNOCANCEL) of
+    IDCANCEL: Result := False;
+    IDYES:
+      if not Exec(ExpandConstant('{app}\runtime\node\node.exe'),
+          ExpandConstant('"{app}\src\standalone-control.mjs" restore-profile --python "{app}\runtime\python\python.exe"'),
+          ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+        Result := MsgBox('The profile could not be restored (is the Micro connected, with Codex and Work Louder Input closed?).' + #13#10#13#10 +
+          'Uninstall anyway? The backup stays in ' + ExpandConstant('{#StateBase}') + '.', mbError, MB_YESNO) = IDYES;
+  end;
 end;
 
 function InitializeUninstall(): Boolean;
+var
+  Message: string;
 begin
-  Result := not RefuseWhileRunning();
+  Message := BusyMessage(ExpandConstant('{#AppExe}'));
+  Result := Message = '';
+  if not Result then SuppressibleMsgBox(Message, mbError, MB_OK, IDOK)
+  else Result := OfferRestore();
+end;
+
+// rc.3 and earlier started a console host at sign-in; keep the user's choice but start the app instead.
+procedure MigrateSignInStart();
+var
+  Value: string;
+begin
+  if RegQueryStringValue(HKCU, '{#RunKey}', '{#AppName}', Value) and (Pos('micro-agent-bridge.cmd', Lowercase(Value)) > 0) then
+    RegWriteStringValue(HKCU, '{#RunKey}', '{#AppName}', '"' + ExpandConstant('{#AppExe}') + '" --background');
 end;
 
 // Removes only hooks this package installed, and only when its ownership record exists, so
@@ -160,7 +244,10 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if CurStep = ssPostInstall then SetUserPath(WizardIsTaskSelected('addpath'));
+  if CurStep = ssPostInstall then begin
+    SetUserPath(WizardIsTaskSelected('addpath'));
+    MigrateSignInStart();
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -168,5 +255,6 @@ begin
   if CurUninstallStep = usUninstall then begin
     RemoveOwnedHooks();
     SetUserPath(False);
+    RegDeleteValue(HKCU, '{#RunKey}', '{#AppName}');
   end;
 end;

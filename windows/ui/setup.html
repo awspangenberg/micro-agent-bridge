@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>Set up Micro Agent Bridge</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <section class="stage" aria-hidden="true">
+    <div id="device" class="device-host"></div>
+    <p class="stage-caption" id="caption"></p>
+  </section>
+
+  <main class="panel">
+    <nav class="scale" id="scale" aria-label="Setup progress">
+      <span class="detent" data-step="connect">1 Connect</span>
+      <span class="detent" data-step="control">2 Control</span>
+      <span class="detent" data-step="map">3 Map</span>
+      <span class="detent" data-step="test">4 Test</span>
+      <span class="detent" data-step="prefs">5 Options</span>
+      <span class="detent" data-step="finish">6 Finish</span>
+    </nav>
+
+    <section class="step" data-step="welcome">
+      <h1>Make your Micro a task board</h1>
+      <p class="lede">Each layer's six keys follow your pinned Codex and Claude tasks and light up with what they're doing. Press a key to jump to its task. Setup takes about two minutes.</p>
+      <div class="content">
+        <ul class="checks" id="preflight"></ul>
+        <div id="preflight-note"></div>
+      </div>
+      <div class="actions"><span class="spacer"></span><button class="btn primary" data-next>Get started</button></div>
+    </section>
+
+    <section class="step" data-step="connect" hidden>
+      <h1>Connect your Micro</h1>
+      <p class="lede">Use one connection, either the cable or Bluetooth. If both are active, the bridge can't tell which one to use.</p>
+      <div class="content">
+        <div class="segmented" role="group" aria-label="Connection">
+          <button type="button" data-via="usb" aria-pressed="true">USB cable</button>
+          <button type="button" data-via="bluetooth" aria-pressed="false">Bluetooth</button>
+        </div>
+        <div data-for="usb">
+          <p>Plug the Micro into this PC with its cable. Windows sets it up automatically.</p>
+        </div>
+        <div data-for="bluetooth" hidden>
+          <p>Put the Micro in pairing mode, following Work Louder's instructions for your board. Then add it in Windows under <b>Bluetooth &amp; devices → Add device → Bluetooth</b>.</p>
+          <button class="btn secondary small" id="open-bluetooth">Open Bluetooth settings</button>
+          <p class="fine">A Micro remembers several Bluetooth channels. Pair on the channel you'll keep using; switching channels later makes the bridge see a different device.</p>
+        </div>
+        <div class="live" id="connect-live"><span class="mark busy"></span><span>Looking for your Micro…</span></div>
+        <div id="connect-note"></div>
+      </div>
+      <div class="actions"><button class="btn quiet" data-back>Back</button><span class="spacer"></span><button class="btn primary" data-next id="connect-next" disabled>Continue</button></div>
+    </section>
+
+    <section class="step" data-step="control" hidden>
+      <h1>Let the bridge take over</h1>
+      <p class="lede">Codex and Work Louder Input also talk to the Micro. Quit them now; you'll reopen Codex once the bridge is running.</p>
+      <div class="content">
+        <ul class="checks" id="apps"></ul>
+        <div id="control-note"></div>
+      </div>
+      <div class="actions"><button class="btn quiet" data-back>Back</button><span class="spacer"></span><button class="btn primary" id="take-control">Connect to the Micro</button></div>
+    </section>
+
+    <section class="step" data-step="map" hidden>
+      <h1>Map the task keys</h1>
+      <p class="lede">Setup assigns the six task keys on layers 1 to 3 in your Micro's profile. Your other keys and layer names stay as they are.</p>
+      <div class="content">
+        <div class="layers">
+          <div class="layer codex"><div class="n">Layer 1</div><div class="t">Codex</div><div class="bar"></div></div>
+          <div class="layer claude"><div class="n">Layer 2</div><div class="t">Claude</div><div class="bar"></div></div>
+          <div class="layer mixed"><div class="n">Layer 3</div><div class="t">Mixed</div><div class="bar"></div></div>
+        </div>
+        <div id="map-body">
+          <label class="consent"><input type="checkbox" id="consent"><span>Back up my current profile, then map the task keys. I can restore the backup from the dashboard at any time.</span></label>
+        </div>
+        <div id="map-note"></div>
+      </div>
+      <div class="actions"><button class="btn quiet" data-back>Back</button><span class="spacer"></span><button class="btn primary" id="map" disabled>Map keys</button></div>
+    </section>
+
+    <section class="step" data-step="test" hidden>
+      <h1>Press a lit key on each layer</h1>
+      <p class="lede">Switch layers the way you normally do, then press any glowing key. Nothing opens during the test.</p>
+      <div class="content">
+        <div class="layers" id="test-layers">
+          <div class="layer codex" data-layer="1"><div class="n">Layer 1</div><div class="t">Codex</div><div class="bar"></div></div>
+          <div class="layer claude" data-layer="2"><div class="n">Layer 2</div><div class="t">Claude</div><div class="bar"></div></div>
+          <div class="layer mixed" data-layer="3"><div class="n">Layer 3</div><div class="t">Mixed</div><div class="bar"></div></div>
+        </div>
+        <div class="live" id="test-live"><span class="mark busy"></span><span>Lighting the keys…</span></div>
+        <div id="test-note"></div>
+      </div>
+      <div class="actions"><button class="btn quiet" data-back>Back</button><span class="spacer"></span><button class="btn secondary" id="test-skip">Skip test</button><button class="btn primary" data-next id="test-next" disabled>Continue</button></div>
+    </section>
+
+    <section class="step" data-step="prefs" hidden>
+      <h1>Choose how it runs</h1>
+      <p class="lede">You can change these later from the bridge's icon in the notification area.</p>
+      <div class="content">
+        <ul class="prefs">
+          <li><span class="name">Start with Windows</span><input type="checkbox" class="switch" id="pref-startup" checked aria-describedby="d-startup"><span class="detail" id="d-startup">Runs quietly in the notification area after you sign in.</span></li>
+          <li><span class="name">Alert me when a task needs me</span><input type="checkbox" class="switch" id="pref-alerts" checked aria-describedby="d-alerts"><span class="detail" id="d-alerts">A Windows notification when a pinned task waits for your approval or an answer.</span></li>
+          <li><span class="name">Detailed Claude status</span><input type="checkbox" class="switch" id="pref-hooks" aria-describedby="d-hooks"><span class="detail" id="d-hooks">Adds status hooks to Claude Code so keys can show planning, tests, edits and approvals. They record only the state of tasks pinned to your Micro, never prompts or code.</span></li>
+        </ul>
+        <div id="prefs-note"></div>
+      </div>
+      <div class="actions"><button class="btn quiet" data-back>Back</button><span class="spacer"></span><button class="btn primary" id="prefs-next">Continue</button></div>
+    </section>
+
+    <section class="step" data-step="finish" hidden>
+      <h1>Your Micro is ready</h1>
+      <p class="lede">Start the bridge, then reopen Codex. Keys show their task's state like this:</p>
+      <div class="content">
+        <ul class="legend" id="legend"></ul>
+        <p class="fine spaced">The bridge keeps the Micro until you stop it from the notification-area icon. Stopping releases the keyboard to Codex and Work Louder Input.</p>
+      </div>
+      <div class="actions"><button class="btn quiet" data-back>Back</button><span class="spacer"></span><button class="btn primary" id="finish">Start Micro Agent Bridge</button></div>
+    </section>
+  </main>
+</div>
+<script type="module" src="setup.js"></script>
+</body>
+</html>

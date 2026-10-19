@@ -12,16 +12,18 @@ Do not interpret a package building successfully as hardware qualification.
 
 ## Download the prerelease
 
-[**Download v1.0.0-rc.3**](https://github.com/awspangenberg/micro-agent-bridge/releases/tag/v1.0.0-rc.3)
+[**Download v1.0.0-rc.4**](https://github.com/awspangenberg/micro-agent-bridge/releases/tag/v1.0.0-rc.4)
 
-- [Ubuntu desktop installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.3/micro-agent-bridge_1.0.0-rc.3_amd64.deb)
-- [Ubuntu SSH observer installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.3/micro-agent-bridge-observer_1.0.0-rc.3_amd64.deb)
-- [Windows x64 installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.3/Micro-Agent-Bridge-1.0.0-rc.3-windows-x64-setup.exe) (standalone Micro host, per-user, unsigned)
-- [SHA256 checksums](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.3/SHA256SUMS)
+- [Ubuntu desktop installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.4/micro-agent-bridge_1.0.0-rc.4_amd64.deb)
+- [Ubuntu SSH observer installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.4/micro-agent-bridge-observer_1.0.0-rc.4_amd64.deb)
+- [Windows x64 installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.4/Micro-Agent-Bridge-1.0.0-rc.4-windows-x64-setup.exe) (standalone Micro host, per-user, unsigned)
+- [SHA256 checksums](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.4/SHA256SUMS)
 
 The Windows installer bundles Node.js and Python and needs no administrator
-access; see [Windows](docs/windows.md#install). It is not Authenticode-signed, so
-SmartScreen warns before running it. Verify its checksum first.
+access. When it finishes, a setup window walks you through connecting or pairing
+the Micro, handing it over from Codex, mapping and testing the keys; the bridge then
+runs from the notification area. See [Windows](docs/windows.md#install). It is not
+Authenticode-signed, so SmartScreen warns before running it. Verify its checksum first.
 
 The Ubuntu packages are prebuilt Ubuntu 24.04/26.04 x86-64 evaluation packages.
 Clean-machine installation tests passed for rc.1; physical Linux keyboard
@@ -38,20 +40,21 @@ Check these first so installation and the first run go smoothly.
 | Requirement | Details |
 | --- | --- |
 | Windows 10 or 11, x64 | ARM64 Windows is not supported. The installer refuses older versions. |
-| Windows PowerShell 5.1 and .NET Framework 4.x | Both ship with Windows 10/11. The HID helper compiles itself with them at runtime, so they must not be removed or disabled. |
+| Windows PowerShell 5.1 and .NET Framework 4.8 | Both ship with Windows 10 (1903 or later) and 11. The app runs on .NET Framework, and the HID helper compiles itself with it at runtime, so neither may be removed or disabled. |
+| Microsoft Edge WebView2 Runtime | Draws the setup and dashboard windows. Windows 11 includes it, and most Windows 10 PCs have it through Edge. If it's missing, the installer warns you; get the Evergreen runtime from [Microsoft](https://go.microsoft.com/fwlink/p/?LinkId=2124703). |
 | Script policy that allows a bypass | The host starts PowerShell with `-ExecutionPolicy Bypass`. A Group Policy that enforces `AllSigned` or `Restricted` (check with `Get-ExecutionPolicy -List`), WDAC or AppLocker can block the helper. |
 | Permission to run unsigned installers | The installer is not code-signed. SmartScreen warns (*More info → Run anyway*). Windows 11 **Smart App Control**, when on, blocks it outright. Antivirus may need to allow `%LOCALAPPDATA%\Programs\Micro Agent Bridge`. |
 | About 150 MB free | The installer bundles Node.js and Python. You need no administrator rights and no separate Node.js or Python. |
 | Work Louder Codex Micro | Firmware 0.6.2 was verified. Use **one** connection, USB or Bluetooth, not both, and keep it unchanged while the host runs. |
 | Codex and/or Claude desktop apps | Installed and signed in. Microsoft Store Codex 26.1013 and Claude 2.42304 were verified. Pin the tasks you want in each app's sidebar; only pinned tasks get keys. |
-| Work Louder Input and Codex closed for the first run | The host needs exclusive access to the keyboard. Quit both before **First-run setup**, then reopen Codex once it reports it is running. |
+| Work Louder Input and Codex closed while setup takes control | The bridge needs exclusive access to the keyboard. Setup shows which of them is open and offers to quit it; reopen Codex once the bridge is running. |
 | Optional: OpenSSH client | Built into Windows. Needed only for status of pinned Claude sessions on other machines, discovered from `~/.ssh/config` and, optionally, Tailscale. |
 
-First-run setup backs up the keyboard profile and remaps the task keys on layers
-1–3. If the profile uses automatic app mappings (`linkedApps`), turn them off in
-Work Louder Input first, or setup refuses to run. After installing, run
-**Doctor** from the Start menu: it should list exactly one Codex Micro and your
-pin counts before you start the host.
+Setup backs up the keyboard profile and remaps the task keys on layers 1–3, with
+your consent. If the profile uses automatic app mappings (`linkedApps`), turn them
+off in Work Louder Input first, or mapping refuses to run. For Bluetooth, have the
+Micro ready to enter pairing mode, and pair it on the channel you'll keep using:
+a different channel looks like a different device to the bridge.
 
 ### Ubuntu packages
 
@@ -100,7 +103,8 @@ integration that the current Store application does not load.
 Node.js 22 and Python 3.10+ are required. `npm test` runs the focused tests.
 `npm run check` checks publication hygiene. `npm run build:deb` builds both Debian
 packages. `python packaging/build_windows.py` builds the Windows installer on
-Windows (npm and Inno Setup 6 required). Build the Mac app on Apple Silicon using `python3 packaging/build_macos.py`.
+Windows (npm, the .NET SDK and Inno Setup 6 required). The setup and dashboard pages
+under `windows/ui` preview in a browser with a built-in simulator. Build the Mac app on Apple Silicon using `python3 packaging/build_macos.py`.
 Signing and notarization are mandatory before publishing a release DMG.
 
 The project uses no provider API keys. Sign in to the desktop apps normally.

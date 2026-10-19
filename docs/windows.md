@@ -9,38 +9,63 @@ is a qualified release.
 ## Install
 
 The release installer (`Micro-Agent-Bridge-<version>-windows-x64-setup.exe`) needs
-Windows 10/11 x64 and Windows PowerShell 5.1, which Windows includes. It bundles
+Windows 10/11 x64, Windows PowerShell 5.1, .NET Framework 4.8 and the Microsoft Edge
+WebView2 Runtime. Windows 11 includes all of them; current Windows 10 includes all
+but sometimes WebView2, and the installer warns if it is missing. It bundles
 Node.js and Python, installs per user to
 `%LOCALAPPDATA%\Programs\Micro Agent Bridge` without administrator access, and is
 not Authenticode-signed. Verify it against `SHA256SUMS` before running it.
 
-The installer adds these Start menu entries:
+### Onboarding
 
-| Entry | Runs |
-| --- | --- |
-| First-run setup (configure profile) | `start --supervise --configure-profile --consent` |
-| Start Micro host | `start --supervise` |
-| Doctor / Device status | `doctor` / `status` |
-| Restore keyboard profile | `restore-profile` |
-| Enable / Remove Claude status hooks | the owned hooks below, using the installed state directory |
+When installation finishes, **Micro Agent Bridge** opens a setup window. Each step
+checks live state, so you can close setup and reopen it later from the Start menu
+(**Set up Micro Agent Bridge**, or *Set up again* in the dashboard).
 
-For the first run, quit Codex and Work Louder Input, open **First-run setup**, and
-wait for the exclusive-access confirmation. Then reopen Codex. Later sessions use
-**Start Micro host**. Each entry opens a console window; Ctrl+C stops the host and
-releases the device.
+1. **Welcome:** checks that Codex and Claude are installed, counts pinned tasks, and
+   checks that a Group Policy doesn't block the PowerShell helper.
+2. **Connect:** USB, or Bluetooth with a button that opens Windows Bluetooth
+   settings for pairing. Setup watches device enumeration until exactly one Micro
+   connection is present, and explains a doubled USB+Bluetooth connection.
+3. **Control:** shows whether Codex and Work Louder Input are running, offers to
+   quit them (force quit only on request), then opens the Micro exclusively once
+   (`status`) and reads its firmware version.
+4. **Map:** explains what changes, asks for consent, then backs up the profile and
+   maps the task rows (`setup-profile --consent`). An already mapped Micro is
+   detected. Linked-app mappings, an interrupted mapping and a different device
+   identity each get specific instructions.
+5. **Test:** lights all eighteen task keys (`test-keys`) and shows each press live
+   until one key on every layer works. Nothing opens during the test.
+6. **Options:** start with Windows, alerts when a pinned task needs approval or an
+   answer, and the opt-in Claude status hooks.
+7. **Finish:** starts the bridge and opens the dashboard, which offers to reopen
+   Codex.
 
-Two installer options are off by default. *Start at sign-in* adds a per-user Run
-entry for `start --supervise` in a minimized console. *Add to PATH* puts the
-`micro-agent-bridge` command on the user PATH. That command takes the same
-commands and options as `standalone-control.mjs` below, plus
-`micro-agent-bridge hooks install|remove`.
+### Running
 
-Setup and uninstall refuse to run while a host is running. Stop it with Ctrl+C
-first. Uninstall removes the program files, the Run entry, the PATH entry, and
-any hooks this package installed. It keeps
-`%LOCALAPPDATA%\Micro Agent Bridge\standalone`, which holds the profile backups.
-Run **Restore keyboard profile** before uninstalling if you want the original
-mappings back. Upgrades replace the program files and keep that directory.
+The app lives in the notification area. Its icon's ring follows the device's ring:
+blue or amber while tasks work, red-orange when a task needs you, red on error.
+Right-click it to stop (releasing the Micro to Codex and Input), start, set up
+again, toggle start with Windows and alerts, or quit. The dashboard shows all
+eighteen slots with their live state and offers **Restore original keyboard
+profile**. With start with Windows on, the app starts in the background and waits
+for the Micro to connect (`start --supervise --wait-for-device`).
+
+Other Start menu entries under *Troubleshooting* run `doctor` and `status` in a
+console. The optional *Add to PATH* task puts the `micro-agent-bridge` command on
+the user PATH. It takes the same commands and options as `standalone-control.mjs`
+below, plus `micro-agent-bridge hooks install|remove`.
+
+### Upgrade and removal
+
+Setup and uninstall ask a running app to quit, which stops the host and releases
+the Micro. A host started from a terminal must be stopped with Ctrl+C first.
+Uninstall offers to restore the original keyboard profile while the Micro is
+connected. It then removes the program files, the sign-in entry, the PATH entry,
+any hooks this package installed, and the app's preferences and WebView cache. It
+keeps `%LOCALAPPDATA%\Micro Agent Bridge\standalone`, which holds the profile
+backups. Upgrades replace the program files and keep that directory; a sign-in
+entry from rc.3 or earlier is moved to the app.
 
 ## Run from source
 

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>Micro Agent Bridge</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<div class="shell">
+  <section class="stage">
+    <div id="device" class="device-host" aria-hidden="true"></div>
+    <div class="layer-tabs" role="tablist" aria-label="Layer shown on the device">
+      <button role="tab" data-layer="0" aria-selected="true">Codex</button>
+      <button role="tab" data-layer="1" aria-selected="false">Claude</button>
+      <button role="tab" data-layer="2" aria-selected="false">Mixed</button>
+    </div>
+  </section>
+
+  <main class="panel dash">
+    <header class="status">
+      <div class="status-text">
+        <h1 id="status-title">Starting…</h1>
+        <p id="status-detail" class="lede"></p>
+      </div>
+      <button class="btn secondary" id="toggle">Stop</button>
+    </header>
+
+    <div id="banner"></div>
+
+    <div class="board" id="board"></div>
+
+    <footer class="dash-foot">
+      <button class="btn quiet" id="restore">Restore original keyboard profile</button>
+      <button class="btn quiet" id="setup">Set up again</button>
+    </footer>
+  </main>
+</div>
+<script type="module" src="dashboard.js"></script>
+</body>
+</html>

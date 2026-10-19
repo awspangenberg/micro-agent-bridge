@@ -20,3 +20,10 @@ Its distribution includes `LICENSE-bsd.txt` and HIDAPI's license files. The npm
 dependencies `node-addon-api` and `pkg-prebuilds` include their MIT licenses.
 Keep those notices with any redistributed dependencies. The Windows exclusive
 transport is implemented here; no extracted vendor SDK code is bundled.
+
+The Windows installer also bundles CPython via Python Build Standalone (PSF
+license and component licenses retained in its `runtime\python` folder) and the
+Microsoft Edge WebView2 SDK 1.0.2903.40 (`Microsoft.Web.WebView2.Core.dll`,
+`Microsoft.Web.WebView2.WinForms.dll`, `WebView2Loader.dll`), redistributed
+under its BSD-style license from the `Microsoft.Web.WebView2` NuGet package. The
+WebView2 Runtime itself is part of Windows and is not bundled.
