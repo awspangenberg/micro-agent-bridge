@@ -97,6 +97,9 @@ h1 {
 .checks li { display: grid; grid-template-columns: 22px 1fr auto; gap: 12px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
 .checks .name { font-weight: 600; }
 .checks .detail { color: var(--muted); font-size: 13px; grid-column: 2 / 4; margin-top: -8px; }
+.checks li.changed { animation: changed 1.6s ease-out; }
+.checks li.changed .detail { color: var(--ink); }
+@keyframes changed { from { background: color-mix(in srgb, var(--ok) 22%, transparent); } to { background: transparent; } }
 .mark { width: 18px; height: 18px; border-radius: 50%; background: var(--line); position: relative; }
 .mark.ok { background: var(--ok); }
 .mark.warn { background: var(--warn); }

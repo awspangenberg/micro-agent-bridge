@@ -28,7 +28,8 @@ export async function call(cmd, args, emit) {
     case 'doctor': {
       const elapsed = Date.now() - start;
       const devices = elapsed < 5000 ? [] : scenario === 'twice' ? [{key: 'a', transport: 'usb'}, {key: 'b', transport: 'bluetooth'}] : [{key: 'a', product: 'Codex Micro', transport: 'bluetooth'}];
-      return ok({platform: 'win32', devices, pins: {codex: 4, claude: 5, errors: {}}});
+      // A Claude task gets pinned a few seconds in, to preview live updates.
+      return ok({platform: 'win32', devices, pins: {codex: 0, claude: elapsed < 7000 ? 0 : 1, errors: {}}});
     }
     case 'running': return {codex: codexOpen ? 1 : 0, input: 0};
     case 'quit': await wait(900); codexOpen = false; return 0;

@@ -49,7 +49,8 @@ async function go(step) {
     d.classList.toggle('done', i < index); d.classList.toggle('now', i === index);
     if (i === index) d.setAttribute('aria-current', 'step'); else d.removeAttribute('aria-current');
   }
-  await enter[step]?.();
+  // Some steps keep polling while shown, so entering is not awaited.
+  enter[step]?.()?.catch?.(error => console.error(error));
   // Move focus to the new step's heading so keyboard and screen-reader users land on it.
   const heading = $('.step:not([hidden]) h1');
   heading.tabIndex = -1; heading.focus({preventScroll: true});
@@ -62,15 +63,29 @@ document.addEventListener('click', e => {
 const enter = {};
 
 // ---- 0. Welcome: what's installed, what's pinned, and whether scripts may run.
+// Pins and installs can change while this screen is open, so it re-checks every few seconds.
+let welcomePoll = 0;
 enter.welcome = async () => {
   device.ring('off'); device.clear();
   caption('');
   const list = $('#preflight'); list.replaceChildren();
   row(list, {mark: 'busy', name: 'Checking this PC…'});
-  env = await call('env');
-  const doctor = parse(await call('doctor')) ?? {};
-  list.replaceChildren();
-  const pins = doctor.pins ?? {};
+  const token = ++welcomePoll;
+  let shown = null;
+  while (token === welcomePoll) {
+    const [nextEnv, doctor] = await Promise.all([call('env'), call('doctor').then(parse)]);
+    if (token !== welcomePoll) return;
+    env = nextEnv;
+    const pins = doctor?.pins ?? {};
+    const key = JSON.stringify([env.codexInstalled, env.claudeInstalled, env.policy, pins.codex, pins.claude]);
+    if (key !== shown) { renderWelcome(pins, shown && JSON.parse(shown)); shown = key; }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+};
+leave.welcome = () => { welcomePoll++; };
+
+function renderWelcome(pins, before) {
+  const list = $('#preflight'); list.replaceChildren();
   row(list, env.codexInstalled
     ? {mark: 'ok', name: 'Codex app', detail: pinText(pins.codex, 'Codex')}
     : {mark: 'warn', name: 'Codex app not found', detail: 'Install Codex from the Microsoft Store to use layers 1 and 3.'});
@@ -81,11 +96,16 @@ enter.welcome = async () => {
   row(list, blocked
     ? {mark: 'bad', name: 'Scripts are blocked by policy', detail: `Group Policy sets PowerShell to ${env.policy}. The bridge's keyboard helper can't run until your administrator allows it.`}
     : {mark: 'ok', name: 'Keyboard helper can run'});
+  // Draw the eye to a count that just changed, such as a task pinned while this screen is open.
+  if (before) {
+    if (before[3] !== pins.codex) list.children[0]?.classList.add('changed');
+    if (before[4] !== pins.claude) list.children[1]?.classList.add('changed');
+  }
   note('#preflight-note', '', (pins.codex ?? 0) + (pins.claude ?? 0) === 0
-    ? ['Tip: pin the tasks you want on keys in each app\'s sidebar. Only pinned tasks get a key.'] : null);
+    ? ['Tip: pin the tasks you want on keys in each app\'s sidebar. Only pinned tasks get a key. This list updates as you pin them.'] : null);
   if ($('#preflight-note').firstChild) $('#preflight-note').firstChild.className = 'callout ok';
   $('[data-step="welcome"] [data-next]').disabled = blocked;
-};
+}
 const pinText = (n, app) => n === undefined ? 'Installed' : n === 0 ? `No pinned ${app} tasks yet` : `${n} pinned task${n === 1 ? '' : 's'}`;
 
 // ---- 1. Connect: poll enumeration until exactly one Micro interface is present.
