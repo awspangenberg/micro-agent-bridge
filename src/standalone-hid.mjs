@@ -234,6 +234,8 @@ export class MicroHidTransport extends EventEmitter {
         else if (Object.hasOwn(message, 'result')) this.current.resolve(message.result);
         else throw Error('Micro RPC response has no result');
       } else {
+        // Every device notification, before filtering, for the watch-input diagnostic.
+        this.emit('notification', {method: message.method ?? message.m ?? null, params: message.params ?? message.p ?? null});
         const event = eventValue(message.method ?? message.m, message.params ?? message.p);
         if (event) this.emit(event.event, event);
       }

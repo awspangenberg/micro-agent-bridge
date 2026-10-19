@@ -6,14 +6,14 @@ import {lightingFrame} from '../src/micro-protocol.mjs';
 
 class FakeTransport extends EventEmitter {
   constructor() { super(); this.calls = []; this.closed = false; }
-  async rpc(method, params) { lightingFrame(params, [0, 6, 12]); this.calls.push({method, params}); return {}; }
+  async rpc(method, params) { if (method === 'v.oai.thstatus') lightingFrame(params, [0, 6, 12]); this.calls.push({method, params}); return {}; }
 }
 
 test('onboarding options are limited to start and test-keys', () => {
   assert.deepEqual(parseArguments(['test-keys', '--ndjson', '--stdin-control']), {command: 'test-keys', ndjson: true, stdinControl: true});
   assert.equal(parseArguments(['start', '--supervise', '--ndjson']).ndjson, true);
-  assert.throws(() => parseArguments(['doctor', '--ndjson']), /only valid with start or test-keys/);
-  assert.throws(() => parseArguments(['status', '--stdin-control']), /only valid with start or test-keys/);
+  assert.throws(() => parseArguments(['doctor', '--ndjson']), /only valid with start, test-keys or watch-input/);
+  assert.throws(() => parseArguments(['status', '--stdin-control']), /only valid with start, test-keys or watch-input/);
 });
 
 test('ndjson reporter writes one typed event per line; text mode keeps the human message', () => {
@@ -59,6 +59,21 @@ test('waiting for a device returns exactly one connection, or null once stopped'
   assert.equal(stopped, null);
   assert.equal(parseArguments(['start', '--wait-for-device']).waitForDevice, true);
   assert.throws(() => parseArguments(['status', '--wait-for-device']), /only valid with start/);
+});
+
+test('watch-input reports every notification and writes only blank key lights', async () => {
+  const {watchInput} = await import('../src/standalone-control.mjs');
+  const transport = new FakeTransport(), signals = new EventEmitter();
+  const running = watchInput(transport, {seconds: 5, signals});
+  await new Promise(r => setImmediate(r));
+  transport.emit('notification', {method: 'v.oai.rad', params: {x: 1}});
+  signals.emit('SIGINT');
+  assert.equal(await running, 'stopped');
+  assert.deepEqual(transport.calls.map(c => c.method), ['device.status', 'v.oai.thstatus', 'v.oai.thstatus', 'v.oai.thstatus']);
+  assert.ok(transport.calls.slice(1).every(c => c.params.every(s => s.b === 0)));
+  assert.equal(transport.listenerCount('notification'), 0);
+  assert.equal(parseArguments(['watch-input', '--seconds', '30']).seconds, 30);
+  assert.throws(() => parseArguments(['start', '--seconds', '30']), /only valid with watch-input/);
 });
 
 test('key test stops on a signal, a disconnect or the deadline without further writes', async () => {

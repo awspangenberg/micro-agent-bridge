@@ -18,6 +18,7 @@ const help = `Windows standalone Micro host
   node src/standalone-control.mjs start
   node src/standalone-control.mjs restore-profile
   node src/standalone-control.mjs test-keys
+  node src/standalone-control.mjs watch-input [--seconds N]
 
 doctor enumerates only; status opens exclusively and reads device.status.
 setup-profile backs up and maps task rows on layers 1, 2, 3. --consent is required.
@@ -46,7 +47,7 @@ unchanged while running; reconnect and sleep require an explicit restart.
 export function parseArguments(args) {
   const options = {command: args[0] || 'doctor'};
   if (['--help', '-h', 'help'].includes(options.command)) return {command: 'help'};
-  if (!['doctor', 'status', 'setup-profile', 'start', 'restore-profile', 'test-keys'].includes(options.command)) throw Error('Unknown command; use --help');
+  if (!['doctor', 'status', 'setup-profile', 'start', 'restore-profile', 'test-keys', 'watch-input'].includes(options.command)) throw Error('Unknown command; use --help');
   for (let i = 1; i < args.length; i++) {
     const name = args[i];
     if (name === '--consent') options.consent = true;
@@ -56,6 +57,11 @@ export function parseArguments(args) {
     else if (name === '--no-remote-discovery') options.remoteDiscovery = false;
     else if (name === '--supervise') options.supervise = true;
     else if (name === '--wait-for-device') options.waitForDevice = true;
+    else if (name === '--seconds') {
+      const seconds = Number(args[++i]);
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > 3600) throw Error('--seconds takes 1 to 3600');
+      options.seconds = seconds;
+    }
     else if (name === '--remote') {
       if (!args[i + 1] || args[i + 1].startsWith('-')) throw Error('Missing value for --remote');
       (options.remotes ??= []).push(args[++i]);
@@ -67,7 +73,8 @@ export function parseArguments(args) {
   if ((options.command === 'setup-profile' || options.configureProfile) && !options.consent) throw Error('Profile setup requires --consent');
   if (options.configureProfile && options.command !== 'start') throw Error('--configure-profile is only valid with start');
   if ((options.remotes || options.remoteDiscovery === false || options.supervise || options.waitForDevice) && options.command !== 'start') throw Error('--remote, --no-remote-discovery, --supervise and --wait-for-device are only valid with start');
-  if ((options.ndjson || options.stdinControl) && !['start', 'test-keys'].includes(options.command)) throw Error('--ndjson and --stdin-control are only valid with start or test-keys');
+  if ((options.ndjson || options.stdinControl) && !['start', 'test-keys', 'watch-input'].includes(options.command)) throw Error('--ndjson and --stdin-control are only valid with start, test-keys or watch-input');
+  if (options.seconds && options.command !== 'watch-input') throw Error('--seconds is only valid with watch-input');
   if (options.remotes) remoteHosts(options.remotes);
   return options;
 }
@@ -203,6 +210,7 @@ async function session(devices, options, shared, {handleSignals = true} = {}) {
       const firmware = await transport.rpc('sys.version').catch(() => null);
       console.log(JSON.stringify({exclusive: true, transport: transportOf(devices[0].path), device, firmware, profile: await profile.inspect()}, null, 2)); return;
     }
+    if (options.command === 'watch-input') { await watchInput(transport, {seconds: options.seconds ?? 120}); return; }
     if (options.command === 'restore-profile') { console.log(JSON.stringify(await profile.restore(), null, 2)); return; }
     if (options.command === 'setup-profile' || options.configureProfile) {
       const result = await profile.configure({consent: options.consent});
@@ -242,6 +250,30 @@ async function session(devices, options, shared, {handleSignals = true} = {}) {
     if (runtime) await runtime.stop();
     await transport?.close();
   }
+}
+
+// Diagnostic: print every device notification (keys, knob, joystick, layer) with a timestamp,
+// for mapping controls. Ends after `seconds`, on Ctrl+C or disconnect.
+export async function watchInput(transport, {seconds = 120, signals = process, now = Date.now} = {}) {
+  const start = now();
+  // The Micro reports input to a host that is driving it, as the bridge does: read the status
+  // and blank the bridge's own key lights (the only write; layer profiles are untouched).
+  const status = await transport.rpc('device.status');
+  for (const bank of [0, 6, 12]) await transport.rpc('v.oai.thstatus', clearFrame(bank));
+  report('ready', {seconds, status}, `Watching Micro input for ${seconds} s (device ${JSON.stringify(status)}). Press controls; Ctrl+C ends.`);
+  const reason = await new Promise(resolve => {
+    const finish = why => {
+      clearTimeout(timer); transport.removeListener('notification', onNote); transport.removeListener('closed', onClosed);
+      signals.removeListener('SIGINT', onStop); signals.removeListener('SIGTERM', onStop); resolve(why);
+    };
+    const onNote = note => report('notification', {ms: now() - start, ...note}, `${String(now() - start).padStart(7)} ms  ${note.method}  ${JSON.stringify(note.params)}`);
+    const onClosed = () => finish('disconnected'), onStop = () => finish('stopped');
+    const timer = setTimeout(() => finish('timeout'), seconds * 1000);
+    transport.on('notification', onNote); transport.once('closed', onClosed);
+    signals.once('SIGINT', onStop); signals.once('SIGTERM', onStop);
+  });
+  report('done', {result: reason}, `Stopped watching (${reason}).`);
+  return reason;
 }
 
 // Verification for onboarding: light every task key, report each press, and finish
