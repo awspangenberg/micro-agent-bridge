@@ -1,7 +1,9 @@
-# Task-bound Claude desktop action via UI Automation. Read-only except for invoking
-# exactly one enabled button in the foreground Claude window whose document URL
-# names the selected session. No keystrokes are injected. Prints one JSON line.
-param([Parameter(Mandatory)][string]$Names, [Parameter(Mandatory)][string]$Ids)
+# Task-bound Claude desktop action via UI Automation. Read-only except for invoking (or, for
+# hold-to-use buttons, toggling on or off) exactly one enabled button in the foreground Claude
+# window whose document URL names one of the allowed sessions. No keystrokes are injected.
+# Prints one JSON line.
+param([Parameter(Mandatory)][string]$Names, [Parameter(Mandatory)][string]$Ids,
+      [ValidateSet('invoke', 'on', 'off')][string]$Mode = 'invoke')
 $ErrorActionPreference = 'Stop'
 function Done($row) { $row | ConvertTo-Json -Compress; exit 0 }
 try {
@@ -34,6 +36,13 @@ try {
   $btnCond = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::Button)
   $found = @($root.FindAll([Windows.Automation.TreeScope]::Descendants, $btnCond) | Where-Object { $labels -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
   if ($found.Count -ne 1) { Done @{performed = $false; reason = "controls-$($found.Count)"} }
+  if ($Mode -ne 'invoke') {
+    $tp = $null
+    if (-not $found[0].TryGetCurrentPattern([Windows.Automation.TogglePattern]::Pattern, [ref]$tp)) { Done @{performed = $false; reason = 'not-toggle'} }
+    $want = if ($Mode -eq 'on') { [Windows.Automation.ToggleState]::On } else { [Windows.Automation.ToggleState]::Off }
+    if ($tp.Current.ToggleState -ne $want) { $tp.Toggle() }
+    Done @{performed = $true; control = $found[0].Current.Name; state = $Mode}
+  }
   $ip = $null
   if (-not $found[0].TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern, [ref]$ip)) { Done @{performed = $false; reason = 'not-invokable'} }
   $ip.Invoke()

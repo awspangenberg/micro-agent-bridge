@@ -8,6 +8,8 @@ import {allocate, pinIdentity} from './slots.mjs';
 import {clearFrame} from './micro-protocol.mjs';
 import {CodexActivity} from './standalone-activity.mjs';
 import {slotLight, ambientLight} from './standalone-palette.mjs';
+import {ControlDecoder, ACTIONS, LAYERS, effectiveMapping, readSettings, readCodexLayout, supported} from './standalone-controls.mjs';
+export {ACTIONS};
 
 const run = promisify(execFile);
 export async function readWindowsInventory({python = 'python', home, claudeData, stateDirectory} = {}) {
@@ -52,30 +54,45 @@ export const standaloneFrame = (states, layer, providers = []) => {
   if (![0, 1, 2].includes(layer)) throw Error('Invalid standalone layer');
   return states.map((state, i) => slotLight(state, providers[i], layer * 6 + i));
 };
-// Mixed-layer lower controls, matching the Mac/Linux helpers. Only Claude tasks can
-// be bound to a window exactly (its document URL names the session), so only they act.
-export const ACTIONS = {
-  ACT14: {labels: ['Allow once', 'Approve once', 'Allow this time', 'Allow'], navigates: false},
-  ACT15: {labels: ['Deny', 'Reject'], navigates: false},
-  ACT19: {labels: ['New', 'New session'], navigates: true},
-  ACT04: {labels: ['Back'], navigates: true},
-  ACT05: {labels: ['Forward'], navigates: true},
-  ACT20: {labels: ['Hide sidebar', 'Show sidebar'], navigates: false},
-};
-export async function runWindowsAction(labels, ids) {
+export async function runWindowsAction(labels, ids, mode = 'invoke') {
   if (process.platform !== 'win32') throw Error('Windows actions require Windows');
   const script = fileURLToPath(new URL('./windows-actions.ps1', import.meta.url));
   const {stdout} = await run('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', script,
-    '-Names', labels.join('|'), '-Ids', ids.join('|')], {windowsHide: true, timeout: 15000, maxBuffer: 65536});
+    '-Names', labels.join('|'), '-Ids', ids.join('|'), '-Mode', mode], {windowsHide: true, timeout: 15000, maxBuffer: 65536});
   return JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
+}
+export async function sendCodexShortcut(chord) {
+  if (process.platform !== 'win32') throw Error('Windows shortcuts require Windows');
+  const script = fileURLToPath(new URL('./windows-keys.ps1', import.meta.url));
+  const {stdout} = await run('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-Chord', chord],
+    {windowsHide: true, timeout: 10000, maxBuffer: 65536});
+  return JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
+}
+// Store app identities; opening by identity needs no URL handler.
+export const APP_IDS = {codex: 'OpenAI.Codex_2p2nqsd0c76g0!App', claude: 'Claude_pzs8sxrjxfjjc!Claude'};
+export async function openWindowsApp(provider) {
+  const id = APP_IDS[provider];
+  if (!id) throw Error('Unknown app');
+  await run('explorer.exe', [`shell:AppsFolder\\${id}`], {windowsHide: true, timeout: 10000}).catch(error => {
+    // explorer.exe exits 1 after handing the launch to the shell.
+    if (error.code !== 1) throw error;
+  });
+  return {performed: true};
 }
 const writeJson = (file, value) => { const temp = file + '.' + process.pid + '.tmp'; fs.writeFileSync(temp, JSON.stringify(value), {mode: 0o600}); fs.renameSync(temp, file); };
 
 export class StandaloneRuntime extends EventEmitter {
-  constructor({transport, inventory, topology, openTask = openWindowsTask, runAction = runWindowsAction, stateDirectory, codex = new CodexActivity(), remote = null, pollMs = 2000}) {
-    super(); Object.assign(this, {transport, inventory, topology, openTask, runAction, stateDirectory, codex, remote, pollMs});
-    this.views = []; this.errors = {}; this.lastInventory = 0; this.lastPaint = []; this.stopped = false; this.selecting = false; this.acting = false; this.bound = null;
-    this.onInput = event => { void (/^ACT\d\d$/.test(event.key) ? this.action(event) : this.select(event)).catch(error => this.emit('notice', error.message)); };
+  constructor({transport, inventory, topology, openTask = openWindowsTask, runAction = runWindowsAction, sendShortcut = sendCodexShortcut, openApp = openWindowsApp,
+    settings = () => readSettings(this.stateDirectory), codexLayout = () => readCodexLayout(), stateDirectory, codex = new CodexActivity(), remote = null, pollMs = 2000, now = Date.now}) {
+    super(); Object.assign(this, {transport, inventory, topology, openTask, runAction, sendShortcut, openApp, settings, codexLayout, stateDirectory, codex, remote, pollMs, now});
+    this.views = []; this.errors = {}; this.lastInventory = 0; this.lastPaint = []; this.stopped = false; this.selecting = false; this.bound = null;
+    this.decoder = new ControlDecoder({now}); this.queue = Promise.resolve(); this.cursor = [null, null, null]; this.holding = null; this.lastActivity = null; this.attention = new Map();
+    this.onInput = event => {
+      if (/^AG\d\d$/.test(event.key)) { void this.select(event).catch(error => this.emit('notice', error.message)); return; }
+      this.onControl(this.decoder.feed(event));
+    };
+    this.onStick = event => this.onControl(this.decoder.feed(event));
+    this.onRadial = event => { this.layerIndex = event.layerIndex; };
     this.onClosed = error => { void this.stop(error || Error('Device disconnected')); };
   }
   async start() {
@@ -90,6 +107,7 @@ export class StandaloneRuntime extends EventEmitter {
       } catch { /* Fresh allocation on missing or invalid cache. */ }
     }
     this.transport.on('input', this.onInput); this.transport.on('closed', this.onClosed);
+    this.transport.on('stick', this.onStick); this.transport.on('radial', this.onRadial);
     this.onLayer = event => { this.lastPaint = []; this.emit('layer', event.layerIndex); };
     this.transport.on('layer', this.onLayer);
     this.codex.connect();
@@ -138,6 +156,14 @@ export class StandaloneRuntime extends EventEmitter {
       this.codex.update([...new Map(this.views.flatMap(v => v.slots).filter(t => t?.provider === 'codex').map(t => [pinIdentity(t), t])).values()]);
       this.codex.connect();
       if (this.remote) { this.remote.update(this.views.flatMap(v => v.slots)); this.remote.tick(); }
+      // When each task started waiting for you: for "next task needing you" and the Mixed app key.
+      const waiting = new Set();
+      for (const t of this.views.flatMap(v => v.slots)) {
+        if (!t || !['approval', 'question', 'awaiting_input'].includes(this.taskState(t))) continue;
+        const identity = pinIdentity(t); waiting.add(identity);
+        if (!this.attention.has(identity)) { this.attention.set(identity, this.now()); this.noteActivity(t.provider); }
+      }
+      for (const identity of [...this.attention.keys()]) if (!waiting.has(identity)) this.attention.delete(identity);
       await this.transport.rpc('device.status');
       for (let layer = 0; layer < 3 && !this.stopped; layer++) {
         this.checkAwake();
@@ -172,29 +198,122 @@ export class StandaloneRuntime extends EventEmitter {
         this.errors[current.provider] || Date.now() - this.lastInventory > 10000) return;
       await this.openTask(current);
       this.lastSelection = {id, at: Date.now()};
-      // Lower Mixed controls bind to the Claude task opened from a Mixed key.
-      this.bound = id >= 12 && current.provider === 'claude' ? {id, identity: pinIdentity(current), at: Date.now()} : null;
+      this.cursor[Math.floor(id / 6)] = id % 6;
+      // In "opened" targeting, lower controls bind to the Claude task last opened by its key.
+      this.bound = id >= 6 && current.provider === 'claude' ? {id, identity: pinIdentity(current), at: Date.now()} : null;
+      this.noteActivity(current.provider);
       this.emit('selected', {layer: Math.floor(id / 6) + 1, slot: id % 6 + 1, provider: task.provider});
     } finally { this.selecting = false; }
   }
-  async action(event) {
-    const spec = ACTIONS[event.key];
-    if (this.stopped || this.acting || event.act !== 1 || !spec || !this.bound) return;
-    const task = this.views[2]?.slots[this.bound.id - 12];
-    // The binding expires and never follows a slot that now holds another task.
-    if (!task || pinIdentity(task) !== this.bound.identity || Date.now() - this.bound.at > 15 * 60000 || this.errors.claude ||
-      Date.now() - this.lastInventory > 10000) { this.bound = null; return; }
-    const ids = [...new Set([task.navId, ...(Array.isArray(task.bridges) ? task.bridges : [])].filter(id => typeof id === 'string'))];
-    this.acting = true;
+
+  // ---- Lower controls -------------------------------------------------------------------
+  noteActivity(provider) { if (provider) this.lastActivity = {provider, at: this.now()}; }
+  onControl(decoded) {
+    if (!decoded || this.stopped) return;
+    // One control at a time, in order; a release always follows its press.
+    this.queue = this.queue.then(() => this.control(decoded)).catch(error => this.emit('notice', error.message));
+  }
+  async control(decoded) {
+    if (this.stopped) return;
+    if (decoded.phase === 'release') {
+      const held = this.holding;
+      if (held?.control === decoded.control) { this.holding = null; await this.perform(held.action, held.layer, decoded.control, 'off'); }
+      return;
+    }
+    let layer = decoded.layer;
+    if (layer === undefined) {
+      // The Claude and Mixed layers share codes; the device says which layer is active.
+      const status = await this.transport.rpc('device.status');
+      layer = status?.layer_index;
+      if (layer !== 1 && layer !== 2) return;
+    }
+    this.layerIndex = layer;
+    const entry = effectiveMapping(this.settings(), this.codexLayout())[LAYERS[layer]][decoded.control];
+    if (!entry || entry.action === 'none') return;
+    const hold = decoded.control === 'mic' && ACTIONS[entry.action]?.claude?.hold;
+    const result = await this.perform(entry.action, layer, decoded.control, hold ? 'on' : 'invoke');
+    if (hold && result.performed) this.holding = {control: decoded.control, action: entry.action, layer};
+  }
+  async perform(action, layer, control, mode) {
+    const spec = ACTIONS[action];
+    let result;
     try {
-      const result = await this.runAction(spec.labels, ids);
-      this.emit('action', {key: event.key, performed: result?.performed === true, reason: result?.reason ?? null});
-      if (result?.performed && spec.navigates) this.bound = null;
-    } finally { this.acting = false; }
+      if (spec.bridge) result = await this.bridgeAction(action, layer);
+      else {
+        // Codex's layer acts on Codex; the Claude layer on Claude; Mixed on whichever app is in front.
+        const providers = layer === 0 ? ['codex'] : layer === 1 ? ['claude'] : ['claude', 'codex'];
+        result = {performed: false, reason: 'unsupported'};
+        for (const provider of providers) {
+          if (!supported(action, provider)) continue;
+          result = provider === 'claude' ? await this.claudeAction(spec, layer, mode) : await this.codexAction(spec);
+          if (result.performed) { this.noteActivity(provider); break; }
+          if (!/^foreground-not-/.test(result.reason ?? '')) break;
+        }
+      }
+    } catch (error) { result = {performed: false, reason: 'error', message: error.message}; }
+    if (mode !== 'off') this.emit('action', {layer: layer + 1, control, action, performed: result.performed === true, reason: result.reason ?? null});
+    return result;
+  }
+  // Claude: the named button in the front Claude window, only when that window shows an allowed task.
+  async claudeAction(spec, layer, mode) {
+    if (this.errors.claude || this.now() - this.lastInventory > 10000) return {performed: false, reason: 'claude-unavailable'};
+    let tasks;
+    if (this.settings().target === 'opened') {
+      const bound = this.bound, task = bound && this.views[Math.floor(bound.id / 6)]?.slots[bound.id % 6];
+      if (!task || pinIdentity(task) !== bound.identity || this.now() - bound.at > 15 * 60000) { this.bound = null; return {performed: false, reason: 'task-not-bound'}; }
+      tasks = [task];
+    } else tasks = this.views[layer]?.slots.filter(t => t?.provider === 'claude' && t.host === 'local') ?? [];
+    const ids = [...new Set(tasks.flatMap(t => [t.navId, ...(Array.isArray(t.bridges) ? t.bridges : [])]).filter(id => typeof id === 'string'))];
+    if (!ids.length) return {performed: false, reason: 'no-pinned-claude-task'};
+    return this.runAction(spec.claude.labels, ids, mode === 'invoke' ? 'invoke' : mode);
+  }
+  // Codex: its own shortcut, only to a Codex window in front. Approve and Reject only while a
+  // pinned Codex task is waiting for approval, so Enter can't send a half-written prompt.
+  async codexAction(spec) {
+    if (spec.guard === 'approval' && !this.views.some(v => v.slots.some(t => t?.provider === 'codex' && this.taskState(t) === 'approval')))
+      return {performed: false, reason: 'no-codex-approval-waiting'};
+    return this.sendShortcut(spec.codex);
+  }
+  layerTasks(layer) { return (this.views[layer]?.slots ?? []).map((t, i) => t && {task: t, slot: i}).filter(Boolean); }
+  async openSlot(layer, slot) {
+    const task = this.views[layer]?.slots[slot];
+    if (!task || this.errors[task.provider]) return {performed: false, reason: 'no-task'};
+    await this.openTask(task);
+    this.cursor[layer] = slot; this.noteActivity(task.provider);
+    if (task.provider === 'claude') this.bound = {id: layer * 6 + slot, identity: pinIdentity(task), at: this.now()};
+    this.emit('selected', {layer: layer + 1, slot: slot + 1, provider: task.provider});
+    return {performed: true};
+  }
+  async bridgeAction(action, layer) {
+    if (action === 'openApp') {
+      // Codex's layer opens Codex, Claude's opens Claude; Mixed opens the app that most recently
+      // asked for you or was acted on.
+      const provider = layer === 0 ? 'codex' : layer === 1 ? 'claude' : this.lastActivity?.provider ?? 'codex';
+      return this.openApp(provider);
+    }
+    if (this.now() - this.lastInventory > 10000) return {performed: false, reason: 'tasks-unavailable'};
+    if (action === 'nextAttention') {
+      const waiting = [];
+      for (const [l, view] of this.views.entries()) for (const [slot, t] of view.slots.entries()) {
+        if (t && ['approval', 'question', 'awaiting_input'].includes(this.taskState(t))) waiting.push({l, slot, at: this.attention.get(pinIdentity(t)) ?? 0});
+      }
+      if (!waiting.length) return {performed: false, reason: 'nothing-waiting'};
+      waiting.sort((a, b) => a.at - b.at);
+      return this.openSlot(waiting[0].l, waiting[0].slot);
+    }
+    const tasks = this.layerTasks(layer);
+    if (!tasks.length) return {performed: false, reason: 'no-pinned-task'};
+    if (action === 'openTask') return this.openSlot(layer, this.cursor[layer] ?? tasks[0].slot);
+    // Previous/next move through the layer's pinned tasks and open the one reached.
+    const at = tasks.findIndex(t => t.slot === this.cursor[layer]);
+    const step = action === 'nextTask' ? 1 : -1;
+    const next = at < 0 ? (step > 0 ? 0 : tasks.length - 1) : (at + step + tasks.length) % tasks.length;
+    return this.openSlot(layer, tasks[next].slot);
   }
   stop(error) {
     if (this.stopPromise) return this.stopPromise;
     this.stopped = true; clearInterval(this.timer); this.transport.removeListener('input', this.onInput);
+    this.transport.removeListener('stick', this.onStick); this.transport.removeListener('radial', this.onRadial);
     this.transport.removeListener('closed', this.onClosed);
     if (this.onLayer) this.transport.removeListener('layer', this.onLayer);
     this.codex.close(); this.codex.socket?.destroy(); this.remote?.close();

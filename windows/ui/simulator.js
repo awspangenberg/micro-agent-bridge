@@ -21,6 +21,34 @@ function snapshot() {
 }
 let ticker;
 
+// A preview of the controls report, shaped like `standalone-control.mjs controls`.
+let controlSettings = {version: 1, target: 'foreground', layers: {codex: {followCodex: true, overrides: {}}, claude: {followCodex: true, overrides: {}}, mixed: {followCodex: true, overrides: {}}}};
+const ACTION_SPECS = {
+  none: ['Nothing', true, true], approve: ['Approve', true, true, true], reject: ['Reject', true, true, true], stop: ['Stop the running turn', true, false],
+  newTask: ['New task', true, true], dictate: ['Dictate while held', true, false], back: ['Back', true, true], forward: ['Forward', true, true],
+  sidebar: ['Show or hide the sidebar', true, true], nextAttention: ['Next task needing you', true, true], prevTask: ['Previous pinned task', true, true],
+  nextTask: ['Next pinned task', true, true], openTask: ['Open the selected task', true, true], openApp: ['Open the app', true, true],
+  planMode: ['Toggle plan mode', false, false], fast: ['Cycle speed', false, false], fork: ['Fork the task', false, false],
+};
+const CODEX_SAYS = {bolt: 'fast', check: 'approve', cross: 'reject', branch: 'fork', mic: 'dictate', app: 'openApp', knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask', up: 'planMode', right: 'forward', down: 'sidebar', left: 'back'};
+const BRIDGE_DEFAULTS = {bolt: 'stop', check: 'approve', cross: 'reject', branch: 'newTask', mic: 'dictate', app: 'openApp', knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask', knobHold: 'nextAttention', up: 'prevTask', down: 'nextTask', left: 'back', right: 'forward'};
+function previewControls() {
+  const actions = Object.fromEntries(Object.entries(ACTION_SPECS).map(([id, [label, claude, codex, guarded]]) => [id, {label, claude: id !== 'none' && claude, codex: id !== 'none' && codex, guarded: !!guarded}]));
+  const mapping = {};
+  for (const [i, layer] of ['codex', 'claude', 'mixed'].entries()) {
+    const providers = i === 0 ? ['codex'] : i === 1 ? ['claude'] : ['claude', 'codex'], conf = controlSettings.layers[layer];
+    mapping[layer] = {};
+    for (const control of Object.keys(BRIDGE_DEFAULTS)) {
+      let action = BRIDGE_DEFAULTS[control], source = 'default';
+      const says = CODEX_SAYS[control];
+      if (conf.followCodex && says) { if (providers.some(p => actions[says][p])) { action = says; source = 'codex'; } else source = 'default-for-unsupported'; }
+      if (conf.overrides[control]) { action = conf.overrides[control]; source = 'override'; }
+      mapping[layer][control] = {action, source, codexAction: says ?? null, runs: Object.fromEntries(providers.map(p => [p, actions[action][p]]))};
+    }
+  }
+  return {settings: controlSettings, codexSettingsFound: true, mapping, controls: Object.keys(BRIDGE_DEFAULTS), actions};
+}
+
 export async function call(cmd, args, emit) {
   await wait(cmd === 'doctor' ? 500 : 250);
   switch (cmd) {
@@ -71,6 +99,8 @@ export async function call(cmd, args, emit) {
       await wait(1200); host = 'running';
       emit({event: 'status', status: 'running', message: 'Running over Bluetooth', state: {snapshot: snapshot()}});
       return true;
+    case 'controls': return ok(previewControls());
+    case 'controlsSet': controlSettings = args.settings; return true;
     default: throw new Error('Simulator has no ' + cmd);
   }
 }

@@ -70,24 +70,47 @@ export class Device {
       this.keys.push({g, light, tint, x, y, width: 80, height: 80});
     }
 
-    // Knob (top left) and joystick (top right) are not lit by the bridge.
+    // Lower controls are not lit by the bridge; each is a group the dashboard can point at.
+    this.controls = {};
+    const control = (name, shape) => { const g = el('g', {class: 'control', 'data-control': name}, svg); shape(g); this.controls[name] = g; return g; };
     const knob = cell(0, 0);
-    el('circle', {cx: knob.x + 40, cy: knob.y + 40, r: 37, fill: 'url(#mab-cap)'}, svg);
-    el('path', {d: `M${knob.x + 22} ${knob.y + 12} Q${knob.x + 44} ${knob.y + 40} ${knob.x + 30} ${knob.y + 74}`, fill: 'none', stroke: 'var(--faint)', 'stroke-width': 2, opacity: .7}, svg);
+    control('knob', g => {
+      el('circle', {cx: knob.x + 40, cy: knob.y + 40, r: 37, fill: 'url(#mab-cap)', class: 'face'}, g);
+      el('path', {d: `M${knob.x + 22} ${knob.y + 12} Q${knob.x + 44} ${knob.y + 40} ${knob.x + 30} ${knob.y + 74}`, fill: 'none', stroke: 'var(--faint)', 'stroke-width': 2, opacity: .7}, g);
+    });
     const stick = cell(3, 0);
-    el('path', {d: octagon(stick.x + 40, stick.y + 40, 36), fill: 'var(--well)', stroke: 'var(--faint)', 'stroke-width': 1.5}, svg);
-    el('circle', {cx: stick.x + 40, cy: stick.y + 40, r: 25, fill: 'var(--stick)'}, svg);
+    control('stick', g => {
+      el('path', {d: octagon(stick.x + 40, stick.y + 40, 36), fill: 'var(--well)', stroke: 'var(--faint)', 'stroke-width': 1.5, class: 'face'}, g);
+      el('circle', {cx: stick.x + 40, cy: stick.y + 40, r: 25, fill: 'var(--stick)'}, g);
+    });
 
     // Action keys and the bottom row carry their printed symbols.
-    ['bolt', 'check', 'cross', 'fork'].forEach((icon, col) => { const {x, y} = cell(col, 2); cap(x, y); glyph(svg, icon, x + 40, y + 40); });
+    [['bolt', 'bolt'], ['check', 'check'], ['cross', 'cross'], ['branch', 'fork']].forEach(([name, icon], col) => {
+      const {x, y} = cell(col, 2);
+      control(name, g => { cap(x, y, 80, 80, g).classList.add('face'); glyph(g, icon, x + 40, y + 40); });
+    });
+    // The touch layer button, with one LED per layer.
     const button = cell(0, 3);
     el('circle', {cx: button.x + 46, cy: button.y + 40, r: 17, fill: 'var(--stick)'}, svg);
-    for (let i = 0; i < 3; i++) el('rect', {x: button.x - 6, y: button.y + 22 + i * 14, width: 9, height: 5, rx: 1.5, fill: 'var(--led)'}, svg);
+    this.leds = [0, 1, 2].map(i => el('rect', {x: button.x - 6, y: button.y + 22 + i * 14, width: 9, height: 5, rx: 1.5, fill: 'var(--led)', opacity: .35}, svg));
     const mic = cell(1, 3);
-    cap(mic.x, mic.y, 168, 80); glyph(svg, 'mic', mic.x + 84, mic.y + 40);
+    control('mic', g => { cap(mic.x, mic.y, 168, 80, g).classList.add('face'); glyph(g, 'mic', mic.x + 84, mic.y + 40); });
     const last = cell(3, 3);
-    cap(last.x, last.y);
+    control('app', g => { cap(last.x, last.y, 80, 80, g).classList.add('face'); });
     host.replaceChildren(svg);
+  }
+
+  // Which layer the LEDs show (0-2), or null for none.
+  layer(index) { this.leds.forEach((led, i) => led.setAttribute('opacity', i === index ? 1 : .35)); }
+
+  // Point at a lower control (knob*, up/down/left/right map to the knob and joystick).
+  highlight(name) {
+    const target = /^knob/.test(name ?? '') ? 'knob' : ['up', 'down', 'left', 'right'].includes(name) ? 'stick' : name;
+    for (const [key, g] of Object.entries(this.controls)) g.classList.toggle('highlight', key === target);
+  }
+  flashControl(name) {
+    this.highlight(name);
+    clearTimeout(this.flashTimer); this.flashTimer = setTimeout(() => this.highlight(null), 900);
   }
 
   // mode: off | steady | search | success | error

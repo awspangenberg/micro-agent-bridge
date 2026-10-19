@@ -200,6 +200,15 @@ $('#consent').addEventListener('change', e => { $('#map').disabled = !e.target.c
 enter.map = async () => {
   caption('');
   const profile = statusInfo?.profile ?? {};
+  if (profile.configured && profile.upgradable) {
+    // Mapped by an earlier version: offer to add the Claude layer's knob, joystick and action keys.
+    device.sweep(LAYER_LIGHTS[1]);
+    $('#map-body').hidden = false; $('#map').textContent = 'Update mapping'; $('#map').disabled = !$('#consent').checked;
+    note('#map-note', '', ['Your task keys are mapped. This version can also map the Claude layer\'s knob, joystick and action keys so they work with Claude.',
+      'Setup restores your original profile, then maps it again. Keys you changed yourself are kept, and so is the earlier backup.']);
+    statusInfo = {...statusInfo, profile: {...profile, configured: false}};
+    return;
+  }
   if (profile.configured) {
     device.sweep(LAYER_LIGHTS[0]);
     $('#map-body').hidden = true; $('#map').textContent = 'Continue'; $('#map').disabled = false;

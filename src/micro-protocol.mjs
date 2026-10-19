@@ -33,12 +33,19 @@ export function deviceState(value,layerIndex=null) {
 export function eventValue(method,value) {
   if(method==='v.oai.hid') {
     const key=value?.k??value?.key;
-    if(typeof key==='string'&&/^(?:AG|ACT)\d{2}$/.test(key)&&Number.isInteger(value.act)&&value.act>=0&&value.act<=3)
+    if(typeof key==='string'&&/^(?:AG\d{2}|ACT\d{2}|ENC_(?:CC|CW|CLK))$/.test(key)&&Number.isInteger(value.act)&&value.act>=0&&value.act<=3)
       return {event:'input',key,act:value.act};
+  }
+  // Codex's native joystick: angle 0..1 and distance 0..1, streamed while pushed.
+  if(method==='v.oai.rad') {
+    if(Number.isFinite(value?.a)&&value.a>=0&&value.a<=1&&Number.isFinite(value?.d)&&value.d>=0&&value.d<=1)
+      return {event:'stick',a:value.a,d:value.d};
   }
   if(method==='kb.radial') {
     const layerIndex=value?.layer_index??value?.layerIndex;
     if(Number.isInteger(layerIndex)&&layerIndex>=0&&layerIndex<=255)return {event:'layer',layerIndex};
+    // Radial joystick reports on the Claude and Mixed layers carry the current layer as `l`.
+    if(Number.isInteger(value?.l)&&value.l>=0&&value.l<=255)return {event:'radial',layerIndex:value.l};
   }
   return null;
 }

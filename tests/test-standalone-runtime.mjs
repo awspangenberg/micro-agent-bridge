@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {StandaloneRuntime, reconcileViews, standaloneFrame, taskRoute} from '../src/standalone-runtime.mjs';
 import {parseArguments} from '../src/standalone-control.mjs';
+import {normalizeSettings, effectiveMapping, parseToml, stickDirection, ACTIONS} from '../src/standalone-controls.mjs';
 
 const codexTask = {provider: 'codex', host: 'local', hostId: 'local', nativeId: '11111111-1111-4111-8111-111111111111', title: 'One'};
 const claudeTask = {provider: 'claude', host: 'local', nativeId: null, navId: 'session_test123', title: 'Two', state: 'working'};
@@ -16,7 +17,8 @@ function fixtures(overrides = {}) {
   transport.close = async error => { transport.closed = true; transport.emit('closed', error); };
   const codex = {connect() {}, update(tasks) { this.tasks = tasks; }, state() { return 'working'; }, close() { this.closed = true; }};
   const opened = [];
-  const runtime = new StandaloneRuntime({transport, codex, inventory: async () => inventory(), topology: async () => {}, openTask: async t => opened.push(t), pollMs: 60000, ...overrides});
+  const runtime = new StandaloneRuntime({transport, codex, inventory: async () => inventory(), topology: async () => {}, openTask: async t => opened.push(t), pollMs: 60000,
+    codexLayout: () => null, settings: () => normalizeSettings(null), ...overrides});
   return {transport, codex, runtime, opened};
 }
 
@@ -33,39 +35,101 @@ test('frames use provider colours for working/inactive and the shared palette ot
   }
 });
 
-test('Mixed lower controls act only on the Claude task opened from a Mixed key', async () => {
+// Feed a raw device event and wait until the control it decodes to has run.
+const press = async (runtime, event) => { runtime.transport.emit(event.event ?? 'input', event); await runtime.queue; };
+
+test('Claude-layer controls click named buttons only for pinned Claude tasks in the front window', async () => {
   const claude = {provider: 'claude', host: 'local', nativeId: null, navId: 'session_test123', title: 'Two', state: 'working', bridges: ['session_alt']};
-  const calls = [], results = [];
-  let result = {performed: true};
-  const {runtime} = fixtures({inventory: async () => ({codex: [codexTask], claude: [claude], errors: {}}), runAction: async (labels, ids) => { calls.push({labels, ids}); return result; }});
+  const calls = [], results = [], shortcuts = [];
+  const {runtime, transport} = fixtures({inventory: async () => ({codex: [codexTask], claude: [claude], errors: {}}),
+    runAction: async (labels, ids, mode) => { calls.push({labels, ids, mode}); return {performed: true}; },
+    sendShortcut: async chord => { shortcuts.push(chord); return {performed: true}; }});
+  let layerIndex = 1;
+  transport.rpc = async (method, params) => { transport.calls.push({method, params}); return method === 'device.status' ? {layer_index: layerIndex} : {}; };
   runtime.on('action', a => results.push(a));
   await runtime.start();
-  const slotOf = provider => runtime.views[2].slots.findIndex(t => t?.provider === provider);
-  await runtime.action({key: 'ACT14', act: 1});
-  assert.equal(calls.length, 0, 'nothing is bound before a selection');
-  await runtime.select({key: `AG${12 + slotOf('codex')}`, act: 1});
-  await runtime.action({key: 'ACT14', act: 1});
-  assert.equal(calls.length, 0, 'Codex windows cannot be bound, so actions stay inert');
-  await runtime.select({key: `AG${12 + slotOf('claude')}`, act: 1});
-  await runtime.action({key: 'ACT16', act: 1});
-  await runtime.action({key: 'ACT14', act: 0});
-  assert.equal(calls.length, 0, 'unmapped controls and key releases do nothing');
-  await runtime.action({key: 'ACT14', act: 1});
-  assert.deepEqual(calls[0], {labels: ['Allow once', 'Approve once', 'Allow this time', 'Allow'], ids: ['session_test123', 'session_alt']});
-  assert.deepEqual(results[0], {key: 'ACT14', performed: true, reason: null});
-  await runtime.action({key: 'ACT04', act: 1});
-  await runtime.action({key: 'ACT05', act: 1});
-  assert.equal(calls.length, 2, 'a performed navigation releases the binding');
-  await runtime.select({key: 'AG13', act: 1}); runtime.lastSelection = null;
-  await runtime.select({key: `AG${12 + slotOf('claude')}`, act: 1});
-  result = {performed: false, reason: 'task-not-bound'};
-  await runtime.action({key: 'ACT04', act: 1});
-  await runtime.action({key: 'ACT20', act: 1});
-  assert.equal(calls.length, 4, 'an unperformed navigation keeps the binding');
+  // Check on the Claude layer (shared code ACT14) approves in Claude, bound to the pinned sessions.
+  await press(runtime, {key: 'ACT14', act: 1});
+  assert.deepEqual(calls[0], {labels: ACTIONS.approve.claude.labels, ids: ['session_test123', 'session_alt'], mode: 'invoke'});
+  assert.deepEqual(results[0], {layer: 2, control: 'check', action: 'approve', performed: true, reason: null});
+  // Releases do nothing except end a held microphone.
+  await press(runtime, {key: 'ACT14', act: 0});
+  assert.equal(calls.length, 1);
+  await press(runtime, {key: 'ACT17', act: 1}); await press(runtime, {key: 'ACT18', act: 1});
+  await press(runtime, {key: 'ACT17', act: 0}); await press(runtime, {key: 'ACT18', act: 0});
+  assert.deepEqual(calls.slice(1).map(c => [c.labels[0], c.mode]), [['Press and hold to record', 'on'], ['Press and hold to record', 'off']]);
+  // Codex's layer sends Codex shortcuts; Approve waits for a Codex approval.
+  await press(runtime, {key: 'ACT07', act: 1});
+  assert.deepEqual(shortcuts, [], 'no Codex approval is waiting');
+  assert.equal(results.at(-1).reason, 'no-codex-approval-waiting');
+  await press(runtime, {event: 'stick', a: 0.01, d: 1});
+  await press(runtime, {event: 'stick', a: 0, d: 0});
+  assert.deepEqual(shortcuts, ['Ctrl+['], 'joystick left is Back');
+  // "Opened" targeting binds to the task last opened by its key, and expires.
+  runtime.settings = () => normalizeSettings({target: 'opened'});
+  await press(runtime, {key: 'ACT15', act: 1});
+  assert.equal(results.at(-1).reason, 'task-not-bound');
+  await runtime.select({key: `AG${String(6 + runtime.views[1].slots.findIndex(Boolean)).padStart(2, '0')}`, act: 1});
+  await press(runtime, {key: 'ACT15', act: 1});
+  assert.deepEqual(calls.at(-1).labels, ACTIONS.reject.claude.labels);
   runtime.bound.at -= 16 * 60000;
-  await runtime.action({key: 'ACT20', act: 1});
-  assert.equal(calls.length, 4, 'bindings expire');
+  await press(runtime, {key: 'ACT15', act: 1});
+  assert.equal(results.at(-1).reason, 'task-not-bound');
   await runtime.stop();
+});
+
+test('Mixed tries Claude then Codex; knob cycles pinned tasks; the app key follows the layer', async () => {
+  const shortcuts = [], apps = [];
+  const {runtime, transport, opened} = fixtures({
+    runAction: async () => ({performed: false, reason: 'foreground-not-claude'}),
+    sendShortcut: async chord => { shortcuts.push(chord); return {performed: true}; },
+    openApp: async provider => { apps.push(provider); return {performed: true}; }});
+  let layerIndex = 2;
+  transport.rpc = async (method, params) => { transport.calls.push({method, params}); return method === 'device.status' ? {layer_index: layerIndex} : {}; };
+  await runtime.start();
+  await press(runtime, {key: 'ACT01', act: 1}); await press(runtime, {key: 'ACT01', act: 0});
+  await press(runtime, {key: 'ACT01', act: 1});
+  assert.deepEqual(opened.map(t => t.provider), ['codex', 'claude'], 'knob right opens the next pinned task each detent');
+  await press(runtime, {key: 'ACT04', act: 1});
+  assert.deepEqual(shortcuts, ['Ctrl+['], 'Claude not in front, so Back goes to Codex');
+  await press(runtime, {key: 'ACT19', act: 1});
+  assert.equal(apps.at(-1), 'codex', 'Mixed opens the app acted on most recently (Back went to Codex)');
+  layerIndex = 1; await press(runtime, {key: 'ACT19', act: 1});
+  assert.equal(apps.at(-1), 'claude');
+  await press(runtime, {key: 'ACT12', act: 1});
+  assert.equal(apps.at(-1), 'codex', "Codex's own app key");
+  // Layer reads come from the device for shared codes only.
+  assert.ok(transport.calls.filter(c => c.method === 'device.status').length >= 5);
+  await runtime.stop();
+});
+
+test('controls follow Codex settings, fall back where Claude has no equivalent, and honour overrides', () => {
+  const layout = parseToml(`
+[desktop.codex-micro-layout]
+encoderMode = "composer-navigation"
+[desktop.codex-micro-layout.slots.ACT06]
+keycapId = "FAST"
+[desktop.codex-micro-layout.slots.ACT07]
+keycapId = "APPR"
+[desktop.codex-micro-layout.slots.ACT10_ACT11]
+keycapId = "MIC"
+[desktop.codex-micro-layout.slots.ACT12]
+keycapId = "CODEX"
+[desktop.codex-micro-layout.analogStick.up]
+type = "command"
+commandId = "composer.togglePlanMode"
+[desktop.codex-micro-layout.analogStick.down]
+type = "command"
+commandId = "toggleSidebar"
+`).desktop['codex-micro-layout'];
+  const map = effectiveMapping(normalizeSettings({layers: {mixed: {followCodex: false, overrides: {bolt: 'nextAttention'}}}}), layout);
+  assert.deepEqual([map.codex.check.action, map.codex.check.source], ['approve', 'codex']);
+  assert.deepEqual([map.claude.down.action, map.claude.mic.action, map.claude.app.action], ['sidebar', 'dictate', 'openApp']);
+  // FAST and plan mode have no Claude equivalent: the bridge default applies there.
+  assert.deepEqual([map.claude.bolt.action, map.claude.bolt.source, map.claude.up.action], ['stop', 'default-for-unsupported', 'prevTask']);
+  assert.equal(map.codex.bolt.runs.codex, false, 'shown as unable to run on Codex');
+  assert.deepEqual([map.mixed.bolt.action, map.mixed.bolt.source, map.mixed.check.source], ['nextAttention', 'override', 'default']);
+  assert.deepEqual(stickDirection(0.76) + stickDirection(0.23) + stickDirection(0.49) + stickDirection(0.007), 'uprightdownleft');
 });
 
 test('three independent views map to all eighteen slots with stable positions', () => {

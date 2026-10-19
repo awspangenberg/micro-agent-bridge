@@ -1,8 +1,23 @@
 import {call, on, parse, failure} from './bridge.js';
 import {Device, COLORS, lightFor} from './device.js';
+import {ControlsView} from './controls.js';
 
 const $ = s => document.querySelector(s);
 const device = new Device($('#device'));
+const controls = new ControlsView($('#controls'), device);
+let view = 'tasks';
+for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => {
+  view = b.dataset.view;
+  for (const o of document.querySelectorAll('[data-view]')) { o.setAttribute('aria-pressed', String(o === b)); o.setAttribute('aria-selected', String(o === b)); }
+  $('#board').hidden = view !== 'tasks'; $('#controls').hidden = view !== 'controls';
+  device.svg.classList.toggle('interactive', view === 'controls');
+  if (view === 'controls') { controls.show(shown); void controls.load(); } else device.highlight(null);
+});
+// In the Controls view, clicking a control on the drawing jumps to its setting.
+device.svg.addEventListener('click', e => {
+  const target = e.target.closest?.('[data-control]');
+  if (view === 'controls' && target) controls.focus(target.dataset.control);
+});
 const NAMES = ['Codex', 'Claude', 'Mixed'];
 const BARS = ['var(--codex)', 'var(--claude)', 'linear-gradient(90deg, var(--codex) 0 50%, var(--claude) 50% 100%)'];
 let status = 'stopped', snapshot = null, shown = 0, physical = null, restoring = false;
@@ -84,6 +99,11 @@ on(message => {
     const e = message.data ?? {};
     if (e.type === 'state') { snapshot = e.snapshot; render(); }
     if (e.type === 'layer') { physical = e.layerIndex <= 2 ? e.layerIndex : null; if (physical !== null) select(physical); }
+    if (e.type === 'action' && e.action) {
+      // Show which control ran, on the layer it ran on.
+      if (e.action.layer - 1 !== shown) select(e.action.layer - 1);
+      device.flashControl(e.action.control);
+    }
     if (e.type === 'selected') {
       const id = (e.selected.layer - 1) * 6 + e.selected.slot - 1;
       device.press(e.selected.slot - 1);
@@ -96,8 +116,11 @@ on(message => {
 function select(layer) {
   shown = layer;
   for (const t of document.querySelectorAll('.layer-tabs button')) t.setAttribute('aria-selected', String(Number(t.dataset.layer) === layer));
+  device.layer(layer);
+  controls.show(layer);
   render();
 }
+device.layer(shown);
 for (const t of document.querySelectorAll('.layer-tabs button')) t.addEventListener('click', () => select(Number(t.dataset.layer)));
 
 $('#toggle').addEventListener('click', async e => {

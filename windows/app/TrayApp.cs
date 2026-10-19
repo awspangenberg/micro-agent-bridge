@@ -248,7 +248,16 @@ namespace MicroAgentBridge
                 case "running": return new Dictionary<string, object> { ["codex"] = Apps.Running("codex").Count, ["input"] = Apps.Running("input").Count };
                 case "quit": return await Apps.Quit(args.Str("app") == "input" ? "input" : "codex", args.Bool("force"));
                 case "bluetooth": Process.Start(new ProcessStartInfo("ms-settings:bluetooth") { UseShellExecute = true }); return true;
-                case "openCodex": Process.Start(new ProcessStartInfo("codex://") { UseShellExecute = true }); return true;
+                case "openCodex": Apps.Open("codex"); return true;
+                case "controls": return (await Cli.Host(30000, "controls")).ToMessage();
+                case "controlsSet":
+                    // The host validates and normalizes this file on every read.
+                    if (!(args.TryGetValue("settings", out var value) && value is Dictionary<string, object> settingsValue)) throw new InvalidOperationException("Missing settings");
+                    Directory.CreateDirectory(Paths.State);
+                    var file = Path.Combine(Paths.State, "controls.json"); var temp = file + ".tmp";
+                    File.WriteAllText(temp, Json.Write(settingsValue));
+                    if (File.Exists(file)) File.Replace(temp, file, null); else File.Move(temp, file);
+                    return true;
                 case "keyTestStart": await EnsureReleased(); StartKeyTest(); return true;
                 case "keyTestStop": await Task.Run(() => keyTest?.Stop()); return true;
                 case "hooks": return await Hooks(args.Bool("enable"));

@@ -169,6 +169,9 @@ code, .path { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5
 .device .ripple { transform-box: fill-box; transform-origin: center; animation: ripple .7s ease-out forwards; pointer-events: none; }
 @keyframes ripple { from { opacity: .9; transform: scale(.9); } to { opacity: 0; transform: scale(1.7); } }
 .device .comet { animation: comet 2.4s linear infinite; }
+.device .control .face { transition: stroke .2s, stroke-width .2s; stroke: transparent; stroke-width: 0; }
+.device .control.highlight .face { stroke: var(--focus); stroke-width: 4; }
+.device.interactive .control { cursor: pointer; }
 @keyframes comet { to { stroke-dashoffset: -1400; } }
 .breathe { animation: breathe 2.6s ease-in-out infinite; }
 .flash { animation: breathe .8s ease-in-out infinite; }

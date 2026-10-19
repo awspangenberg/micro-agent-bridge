@@ -8,6 +8,7 @@ import {StandaloneRuntime, readWindowsInventory} from './standalone-runtime.mjs'
 import {acquireLock} from './lock.mjs';
 import {RemoteClaudeStatus, remoteHosts} from './standalone-remotes.mjs';
 import {clearFrame} from './micro-protocol.mjs';
+import {CONTROLS, ACTIONS, effectiveMapping, readSettings, readCodexLayout, supported} from './standalone-controls.mjs';
 export {session as runSession};
 
 const help = `Windows standalone Micro host
@@ -19,6 +20,7 @@ const help = `Windows standalone Micro host
   node src/standalone-control.mjs restore-profile
   node src/standalone-control.mjs test-keys
   node src/standalone-control.mjs watch-input [--seconds N]
+  node src/standalone-control.mjs controls
 
 doctor enumerates only; status opens exclusively and reads device.status.
 setup-profile backs up and maps task rows on layers 1, 2, 3. --consent is required.
@@ -47,7 +49,7 @@ unchanged while running; reconnect and sleep require an explicit restart.
 export function parseArguments(args) {
   const options = {command: args[0] || 'doctor'};
   if (['--help', '-h', 'help'].includes(options.command)) return {command: 'help'};
-  if (!['doctor', 'status', 'setup-profile', 'start', 'restore-profile', 'test-keys', 'watch-input'].includes(options.command)) throw Error('Unknown command; use --help');
+  if (!['doctor', 'status', 'setup-profile', 'start', 'restore-profile', 'test-keys', 'watch-input', 'controls'].includes(options.command)) throw Error('Unknown command; use --help');
   for (let i = 1; i < args.length; i++) {
     const name = args[i];
     if (name === '--consent') options.consent = true;
@@ -115,6 +117,14 @@ export async function main(args = process.argv.slice(2)) {
 async function command(options) {
   const base = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Micro Agent Bridge');
   const stateDirectory = path.resolve(options.stateDirectory || path.join(base, 'standalone'));
+  if (options.command === 'controls') {
+    // What each lower control does on each layer, for the dashboard. Opens no device.
+    const settings = readSettings(stateDirectory), codexLayout = readCodexLayout(options.home);
+    console.log(JSON.stringify({settings, codexSettingsFound: Boolean(codexLayout), mapping: effectiveMapping(settings, codexLayout),
+      controls: CONTROLS, actions: Object.fromEntries(Object.entries(ACTIONS).map(([id, a]) => [id, {label: a.label,
+        claude: supported(id, 'claude'), codex: supported(id, 'codex'), guarded: a.guard === 'approval'}]))}));
+    return;
+  }
   let devices = await enumerateMicroDevices();
   if (options.waitForDevice && devices.length !== 1) { devices = await waitForDevice(devices); if (!devices) return; }
   const inventory = () => readWindowsInventory({...options, stateDirectory});

@@ -18,6 +18,11 @@ A 4 x 4 grid inside a frosted rim. The rim is the ambient light ring.
 The layer button sends no event. The current layer appears as `layer_index` in `device.status`
 (0 to 2) and as `l` in `kb.radial` notifications.
 
+From mapping version 2, setup gives the Claude layer the same lower-control codes as the Mixed
+layer when its lower controls are unused. The host tells layers 2 and 3 apart by reading
+`layer_index` from `device.status` on each press. The bridge's handling is in
+`src/standalone-controls.mjs` and is described in [Windows](windows.md#lower-controls).
+
 ## Events by layer
 
 Key events arrive as `v.oai.hid {k, act}`, where `act` is 1 for press and 0 for release. Knob

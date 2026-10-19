@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { StandaloneProfile } from '../src/standalone-profile.mjs';
+import { StandaloneProfile, LOWER_CONTROLS } from '../src/standalone-profile.mjs';
 
 function original({ missing = false, linkedApps = [] } = {}) {
   return Buffer.from(JSON.stringify({
@@ -157,16 +157,79 @@ test('owned-row conflicts refuse restoration without partially restoring other l
   assert.equal(f.writes().length, count);
 });
 
-test('missing layers use blank native layouts and are removed on restore', async t => {
+test('missing layers get the bridge lower controls and are removed on restore', async t => {
   const baseline = original({ missing: true }), f = fixture(t, baseline), host = f.host();
   await host.configure({ consent: true });
   const layers = JSON.parse(f.bytes).profiles[0].layers;
   assert.deepEqual(layers.map(l => [l.id, l.name]), [[0, 'Personal 0'], [1, 'Claude'], [2, 'Mixed']]);
   for (const layer of layers.slice(1)) {
-    assert.deepEqual(layer.layout.keymap.slice(2), [Array(4).fill('KC_NONE'), Array(3).fill('KC_NONE')]);
-    assert.deepEqual(layer.layout.encoders, [['KC_NONE', 'KC_NONE', 'KC_NONE']]);
-    assert.deepEqual(layer.layout.joystick, { type: 'RADIAL', sectors: [] });
+    assert.deepEqual(layer.layout.keymap.slice(2), LOWER_CONTROLS.rows);
+    assert.deepEqual(layer.layout.encoders, LOWER_CONTROLS.encoders);
+    assert.deepEqual(layer.layout.joystick, LOWER_CONTROLS.joystick);
   }
+  assert.deepEqual(await host.inspect().then(s => [s.mapping, s.upgradable, s.lowerControls]), [2, false, [1, 2]]);
+  await host.restore();
+  assert.deepEqual(f.bytes, baseline);
+});
+
+// A Claude layer whose lower controls send nothing, as the earlier setup left it.
+function blankClaudeLayer() {
+  const value = JSON.parse(original());
+  Object.assign(value.profiles[0].layers[1].layout, {
+    keymap: [['KC_A', 'KC_B'], ['KC_C', 'KC_D', 'KC_E', 'KC_F'], Array(4).fill('KC_NONE'), Array(3).fill('KC_NONE')],
+    encoders: [['KC_NONE', 'KC_NONE', 'KC_NONE']], joystick: { type: 'RADIAL', sectors: [{ k: 'KI_X', a1: 0.1875, a2: 0.3125 }] },
+  });
+  return Buffer.from(JSON.stringify(value));
+}
+
+test('an unused Claude-layer lower region is mapped, verified and restored exactly', async t => {
+  const baseline = blankClaudeLayer(), f = fixture(t, baseline), host = f.host();
+  await host.configure({ consent: true });
+  const [native, claude, mixed] = JSON.parse(f.bytes).profiles[0].layers;
+  assert.deepEqual(claude.layout.keymap.slice(2), LOWER_CONTROLS.rows);
+  assert.deepEqual(claude.layout.encoders, LOWER_CONTROLS.encoders);
+  assert.deepEqual(claude.layout.joystick, LOWER_CONTROLS.joystick);
+  // Codex's layer and a Mixed layer with its own lower controls are not touched.
+  assert.deepEqual(native.layout.keymap.slice(2), [['KC_G', 'KC_H', 'KC_I', 'KC_J'], ['KC_K', 'KC_L', 'KC_M']]);
+  assert.deepEqual(mixed.layout.encoders, [['KC_LEFT', 'KC_RIGHT', 'KC_ENTER']]);
+  assert.deepEqual((await host.verify()).configured, true);
+  f.edit(p => { p.profiles[0].layers[1].layout.encoders = [['KC_A', 'KC_B', 'KC_C']]; });
+  await assert.rejects(host.verify(), /conflict|edited/i);
+  f.edit(p => { p.profiles[0].layers[1].layout.encoders = structuredClone(LOWER_CONTROLS.encoders); });
+  await host.restore();
+  assert.deepEqual(f.bytes, baseline);
+});
+
+test('lower controls a person assigned are never taken over', async t => {
+  const f = fixture(t), host = f.host();
+  await host.configure({ consent: true });
+  const claude = JSON.parse(f.bytes).profiles[0].layers[1];
+  assert.deepEqual(claude.layout.keymap.slice(2), [['KC_G', 'KC_H', 'KC_I', 'KC_J'], ['KC_K', 'KC_L', 'KC_M']]);
+  assert.deepEqual((await host.inspect()).lowerControls, []);
+});
+
+test('a mapping-1 record upgrades by restoring and configuring again, keeping its backup', async t => {
+  const baseline = blankClaudeLayer(), f = fixture(t, baseline), host = f.host();
+  await host.configure({ consent: true });
+  // Rewrite the device and record as mapping 1 (task rows only), as rc.5 and earlier left them.
+  await host.restore();
+  const value = JSON.parse(baseline);
+  for (const [i, layer] of value.profiles[0].layers.entries()) {
+    layer.layout.keymap.splice(0, 2, ...[[0, 1], [2, 3, 4, 5]].map(row => row.map(n => `KV_OAI_AG${String(i * 6 + n).padStart(2, '0')}`)));
+  }
+  f.bytes = Buffer.from(JSON.stringify(value));
+  const state = f.readState();
+  const crypto = await import('node:crypto');
+  Object.assign(state, { state: 'configured', mappedSha256: crypto.createHash('sha256').update(f.bytes).digest('hex') });
+  delete state.mapping;
+  fs.writeFileSync(path.join(f.directory, 'standalone-profile-ownership.json'), JSON.stringify(state));
+  const backups = () => fs.readdirSync(f.directory).filter(n => n.startsWith('standalone-profile-backup-'));
+  const before = backups();
+  assert.deepEqual(await host.inspect().then(s => [s.mapping, s.upgradable]), [1, true]);
+  await host.configure({ consent: true });
+  assert.deepEqual(JSON.parse(f.bytes).profiles[0].layers[1].layout.encoders, LOWER_CONTROLS.encoders);
+  assert.deepEqual(await host.inspect().then(s => [s.mapping, s.upgradable, s.configured]), [2, false, true]);
+  assert.ok(before.every(name => backups().includes(name)));
   await host.restore();
   assert.deepEqual(f.bytes, baseline);
 });

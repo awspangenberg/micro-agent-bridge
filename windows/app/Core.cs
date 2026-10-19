@@ -158,24 +158,39 @@ namespace MicroAgentBridge
     static class Apps
     {
         // The desktop apps register their URL schemes; that is enough to know they are installed.
-        public static bool Installed(string scheme)
+        public static bool Installed(string app)
         {
-            using (var k = Registry.ClassesRoot.OpenSubKey(scheme)) return k?.GetValue("URL Protocol") != null;
+            using (var k = Registry.ClassesRoot.OpenSubKey(app)) if (k?.GetValue("URL Protocol") != null) return true;
+            // Codex registers no URL scheme here; its Store package folder is the evidence.
+            var family = AppIds.TryGetValue(app, out var id) ? id.Split('!')[0] : null;
+            return family != null && Directory.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Packages", family));
         }
 
+        // The Codex desktop app's processes are named ChatGPT (ChatGPT.exe in the OpenAI.Codex package).
         static readonly Dictionary<string, string[]> Names = new Dictionary<string, string[]>
         {
-            ["codex"] = new[] { "Codex" },
+            ["codex"] = new[] { "ChatGPT", "Codex" },
             ["input"] = new[] { "Input", "WorkLouderInput", "Work Louder Input" },
         };
+
+        // Store app identities, for opening an app without a URL handler.
+        public static readonly Dictionary<string, string> AppIds = new Dictionary<string, string>
+        {
+            ["codex"] = "OpenAI.Codex_2p2nqsd0c76g0!App",
+            ["claude"] = "Claude_pzs8sxrjxfjjc!Claude",
+        };
+        public static void Open(string app) =>
+            Process.Start(new ProcessStartInfo("explorer.exe", "shell:AppsFolder\\" + AppIds[app]) { UseShellExecute = false });
 
         public static List<Process> Running(string app) =>
             Names[app].SelectMany(Process.GetProcessesByName).Where(p => app != "codex" || Owns(p, "OpenAI.Codex")).ToList();
 
         static bool Owns(Process p, string package)
         {
+            // Store app paths can be unreadable; a ChatGPT process we can't inspect counts as Codex
+            // only when the Codex package is installed.
             try { return p.MainModule.FileName.IndexOf(package, StringComparison.OrdinalIgnoreCase) >= 0; }
-            catch { return true; }
+            catch { return Installed("codex"); }
         }
 
         // Asks the app to close its windows; force only on an explicit request.

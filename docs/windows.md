@@ -220,21 +220,54 @@ claude.ai service, which the host never contacts.
 
 ### Lower controls
 
-On the Mixed layer, after a Claude task is opened with its Mixed key, the lower
-controls act on that task in the Claude desktop app: ACT14 Allow, ACT15 Deny,
-ACT19 New, ACT04/ACT05 Back/Forward, ACT20 sidebar. Each press checks, through UI
-Automation, that the foreground window is the installed Claude app and that its
-document URL names exactly that session (navigation or bridge ID), then invokes
-the single enabled, visible button with the expected label. Anything else (zero or
-several matches, another task in front, an expired 15-minute binding, a different
-task in the slot) does nothing. No keystrokes are injected and no shell command is
-substituted. A performed Back/Forward/New releases the binding.
+The action keys, microphone, bottom-right key, knob and joystick work on all
+three layers. [Controls](micro-controls.md) lists the events each one sends. The
+dashboard's **Controls** view shows what each control does on each layer and
+where that comes from. You can change any of them there.
 
-Codex windows expose only an internal `app://` document URL with no task identity,
-so a Codex action could not be proven to reach the selected task; Codex tasks and
-layer 1's native controls stay inert. Microphone, fork, FAST, dial, and plan
-controls have no task-bound desktop control and do nothing. Existing lower
-mappings are preserved; newly created layers have blank lower controls.
+**What a control does.** With *Follow Codex settings* on (the default), each layer
+uses what Codex assigns to that control in its own Micro settings
+(`~/.codex/config.toml`, `[desktop.codex-micro-layout]`), so Codex stays the one
+place to configure them. Where Codex's choice can't run on that layer, for example
+FAST or plan mode in Claude, the bridge default applies instead:
+
+| Control | Bridge default |
+|---|---|
+| Bolt, check, cross, branch | Stop the running turn, Approve, Reject, New task |
+| Microphone | Dictate while held |
+| Bottom-right key | Open the app: Codex on layer 1, Claude on layer 2, and on layer 3 whichever app most recently asked for you or was acted on |
+| Knob left/right, press, hold | Previous/next pinned task on this layer (opening it), open the selected task, next task needing you |
+| Joystick up/down/left/right | Previous/next pinned task, Back, Forward |
+
+Choosing an action in the Controls view overrides it for that layer; *Reset*
+returns to the followed or default action.
+
+**Claude** (layer 2, and layer 3 when a Claude window is in front). Each action
+invokes one enabled, visible button with the expected name through UI Automation,
+after checking that the foreground window is the installed Claude app and that its
+document URL names an allowed session. By default, the allowed sessions are the
+pinned Claude tasks on that layer (*the pinned task in front*). With *the task
+last opened with its key*, only the Claude task last opened by its key qualifies,
+for 15 minutes. Dictation toggles Claude's "Press and hold to record" button on
+when the key goes down and off when it comes up. No keystrokes are sent to Claude.
+
+**Codex** (layer 1, and layer 3 when a Codex window is in front). Codex exposes its
+window content to neither UI Automation nor any outside interface, so the bridge
+sends Codex's own default shortcut for the action: Back `Ctrl+[`, Forward `Ctrl+]`,
+sidebar `Ctrl+B`, new task `Ctrl+N`, Approve `Enter` and Reject `Escape`. It sends
+them only while the foreground window is the Codex app and no modifier key is held.
+Approve and Reject are sent only while a pinned Codex task is waiting for approval,
+so `Enter` can't send a half-written prompt. FAST, fork, plan mode and dictation
+have no default Codex shortcut and do nothing on Codex. Task navigation, the
+bottom-right key and the next task needing you work for both apps, because the
+bridge opens those tasks itself.
+
+**Profile.** Setup maps the Claude layer's knob, joystick and action keys to the
+bridge's codes when they are unused (`KC_NONE`). It never takes over lower controls
+a person assigned. The layer 1 controls stay Codex's own, and restore puts back
+whatever was there. A device mapped by rc.5 or earlier is offered an update in
+setup. The update restores the original profile and maps it again, keeping later
+edits and every backup.
 
 ## Profile backup and restore
 

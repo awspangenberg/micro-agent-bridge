@@ -66,7 +66,35 @@ function validateLayout(layer) {
   }
 }
 
-function mappingPlan(original) {
+// Lower controls on the Claude and Mixed layers: action keys, microphone, last key, knob and
+// joystick send the same KV_OAI codes on both layers; the host tells them apart by the current
+// layer. Codex's own layer keeps its native codes. See docs/micro-controls.md.
+export const LOWER_CONTROLS = Object.freeze({
+  rows: [['KV_OAI_ACT13', 'KV_OAI_ACT14', 'KV_OAI_ACT15', 'KV_OAI_ACT16'], ['KV_OAI_ACT17', 'KV_OAI_ACT18', 'KV_OAI_ACT19']],
+  encoders: [['KV_OAI_ACT00', 'KV_OAI_ACT01', 'KV_OAI_ACT02']],
+  joystick: { type: 'RADIAL', sectors: [
+    { k: 'KV_OAI_ACT04', a1: 0.875, a2: 0.125 }, { k: 'KV_OAI_ACT05', a1: 0.125, a2: 0.375 },
+    { k: 'KV_OAI_ACT20', a1: 0.375, a2: 0.625 }, { k: 'KV_OAI_ACT03', a1: 0.625, a2: 0.875 },
+  ] },
+});
+export const MAPPING_VERSION = 2;
+const lowerOf = layer => ({ rows: layer.layout.keymap.slice(2, 4), encoders: layer.layout.encoders, joystick: layer.layout.joystick });
+const blank = key => key === 'KC_NONE' || key === undefined;
+// Only an unused lower region is taken over; a person's own lower mappings are left alone.
+const lowerIsBlank = layer => {
+  const rows = layer.layout.keymap.slice(2, 4), encoders = layer.layout.encoders;
+  return rows.length === 2 && rows[0]?.length === 4 && rows[1]?.length === 3 && rows.flat().every(blank) &&
+    (encoders === undefined || (Array.isArray(encoders) && encoders.flat().every(blank)));
+};
+function applyLower(layer) {
+  const lower = structuredClone(LOWER_CONTROLS);
+  layer.layout.keymap.splice(2, 2, ...lower.rows);
+  layer.layout.encoders = lower.encoders;
+  layer.layout.joystick = lower.joystick;
+}
+
+function mappingPlan(original, version = MAPPING_VERSION) {
+  if (version !== 1 && version !== 2) throw Error('Unsupported profile mapping version');
   const { source, profile } = parseProfile(original, true);
   const native = profile.layers.find(layer => layer.id === 0);
   validateLayout(native);
@@ -91,7 +119,14 @@ function mappingPlan(original) {
     const start = id * 6;
     const mappedRows = [[key(start), key(start + 1)], [key(start + 2), key(start + 3), key(start + 4), key(start + 5)]];
     layer.layout.keymap.splice(0, 2, ...mappedRows);
-    layers.push({ id, created, originalRows, mappedRows, mappedLayer: created ? structuredClone(layer) : null });
+    // Version 2 also maps the lower controls of a created layer, and of the Claude layer when unused.
+    let originalLower = null, mappedLower = null;
+    if (version >= 2 && id > 0 && (created || (id === 1 && lowerIsBlank(layer)))) {
+      if (!created) originalLower = structuredClone(lowerOf(layer));
+      applyLower(layer);
+      if (!created) mappedLower = structuredClone(lowerOf(layer));
+    }
+    layers.push({ id, created, originalRows, mappedRows, originalLower, mappedLower, mappedLayer: created ? structuredClone(layer) : null });
   }
   const mapped = isDeepStrictEqual(source, JSON.parse(original.toString('utf8'))) ? original : Buffer.from(JSON.stringify(source));
   if (mapped.length > MAX_PROFILE_BYTES) throw Error('Mapped profile exceeds its size bound');
@@ -102,7 +137,8 @@ function checkOwnedRows(profile, layers) {
   for (const owned of layers) {
     const layer = profile.layers.find(value => value.id === owned.id);
     const matches = owned.created ? isDeepStrictEqual(layer, owned.mappedLayer) :
-      isDeepStrictEqual(layer?.layout?.keymap?.slice(0, 2), owned.mappedRows);
+      isDeepStrictEqual(layer?.layout?.keymap?.slice(0, 2), owned.mappedRows) &&
+      (!owned.mappedLower || (layer && isDeepStrictEqual(JSON.parse(JSON.stringify(lowerOf(layer))), owned.mappedLower)));
     if (!matches) throw Error(`Profile layer ${owned.id} was edited; owned region conflict`);
   }
 }
@@ -115,7 +151,17 @@ function restoreTarget(current, original, plan) {
   for (const owned of plan.layers) {
     const index = profile.layers.findIndex(layer => layer.id === owned.id);
     if (owned.created) profile.layers.splice(index, 1);
-    else profile.layers[index].layout.keymap.splice(0, 2, ...structuredClone(owned.originalRows));
+    else {
+      const layout = profile.layers[index].layout;
+      layout.keymap.splice(0, 2, ...structuredClone(owned.originalRows));
+      if (owned.originalLower) {
+        const lower = structuredClone(owned.originalLower);
+        layout.keymap.splice(2, 2, ...lower.rows);
+        for (const name of ['encoders', 'joystick']) {
+          if (lower[name] === undefined) delete layout[name]; else layout[name] = lower[name];
+        }
+      }
+    }
   }
   const target = Buffer.from(JSON.stringify(source));
   if (target.length > MAX_PROFILE_BYTES) throw Error('Restored profile exceeds its size bound');
@@ -137,7 +183,8 @@ function recognizedInterruptedBytes(current, transaction) {
   return false;
 }
 
-/** Owns only the first two task-key rows of existing profile-0 layers.
+/** Owns the first two task-key rows of existing profile-0 layers and, from mapping 2, the unused
+ * lower controls of the Claude layer.
  * The caller owns the device connection and must prevent competing host processes.
  * All public operations for a state directory are serialized in this process.
  */
@@ -186,7 +233,8 @@ export class StandaloneProfile {
     const backupPath = path.join(this.stateDirectory, record.backup.file);
     const original = readBounded(backupPath, MAX_PROFILE_BYTES);
     if (!original.length || sha256(original) !== record.backup.sha256) throw Error('Profile backup integrity mismatch');
-    const plan = mappingPlan(original);
+    // Records written before lower-control mapping existed carry no version and use mapping 1.
+    const plan = mappingPlan(original, record.mapping ?? 1);
     if (sha256(plan.mapped) !== record.mappedSha256) throw Error('Profile mapping integrity mismatch');
     let transaction;
     if (record.state === 'pending') {
@@ -259,7 +307,13 @@ export class StandaloneProfile {
   async configure({ consent = false } = {}) {
     if (consent !== true) throw Error('Explicit profile configuration consent is required');
     return this.#serial(async () => {
-      const owned = this.#load();
+      let owned = this.#load();
+      // An older mapping is upgraded by restoring it, then configuring afresh; later edits outside
+      // the owned rows are preserved by restore, and every earlier backup is kept.
+      if (owned?.record.state === 'configured' && (owned.record.mapping ?? 1) < MAPPING_VERSION) {
+        await this.#restore(owned);
+        owned = this.#load();
+      }
       if (owned && owned.record.state !== 'restored') {
         const { record, plan, transaction, backupPath } = owned;
         if (transaction?.operation === 'restore') throw Error('Pending profile restore must be completed before configuration');
@@ -285,7 +339,7 @@ export class StandaloneProfile {
       writeDurable(backupPath, original);
       await this.#unchanged(original);
       const record = {
-        version: 1, deviceKey: this.deviceKey, state: 'configured',
+        version: 1, mapping: MAPPING_VERSION, deviceKey: this.deviceKey, state: 'configured',
         backup: { file: backupFile, sha256: sha256(original) }, mappedSha256: sha256(plan.mapped),
       };
       const changed = !original.equals(plan.mapped);
@@ -303,6 +357,13 @@ export class StandaloneProfile {
     return this.#serial(async () => {
       const owned = this.#load();
       if (!owned || owned.record.state === 'restored') return { restored: true, changed: false, backupPath: owned?.backupPath };
+      return this.#restore(owned);
+    });
+  }
+
+  // Callers hold the serial queue.
+  async #restore(owned) {
+    {
       const { record, original, plan, backupPath, transaction } = owned;
       const current = await this.#readProfile(Boolean(transaction?.attempted));
       let target;
@@ -321,7 +382,7 @@ export class StandaloneProfile {
       }
       this.#finish(record, 'restored');
       return { restored: true, changed, backupPath, sha256: sha256(target), preservedLaterEdits: !target.equals(original) };
-    });
+    }
   }
 
   verify() {
@@ -342,6 +403,9 @@ export class StandaloneProfile {
         deviceKey: this.deviceKey, state: owned?.record.state ?? 'unconfigured',
         configured: owned?.record.state === 'configured', pending: owned?.record.state === 'pending',
         backupPath: owned?.backupPath, banks: [0, 6, 12],
+        // Setup offers to upgrade a configured profile whose lower controls are not mapped yet.
+        mapping: owned ? owned.record.mapping ?? 1 : null, upgradable: owned?.record.state === 'configured' && (owned.record.mapping ?? 1) < MAPPING_VERSION,
+        lowerControls: owned ? owned.plan.layers.filter(l => l.mappedLower || (l.created && l.id > 0 && (owned.record.mapping ?? 1) >= 2)).map(l => l.id) : [],
       };
     });
   }
