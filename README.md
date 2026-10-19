@@ -1,9 +1,9 @@
 # Micro Agent Bridge
 
 Independent Claude and mixed task layers for the Work Louder Codex Micro.
-Native Codex stays on layer 1. Layer 2 shows six recent Claude Code pins; layer 3
-shows six recent pins across Codex and Claude. Task activity does not change pin
-recency. Surviving assignments retain their positions.
+In the native-service integration, Codex stays on layer 1. Layer 2 shows six recent
+Claude Code pins; layer 3 shows six recent pins across Codex and Claude. Task
+activity does not change pin recency. Surviving assignments retain their positions.
 
 **Release status: under qualification. No supported v1.0 binary release yet.**
 The original macOS helper demonstrated the three layers. Portable installers,
@@ -46,6 +46,13 @@ are not currently supported.
 [Compatibility and limitations](docs/compatibility.md) ·
 [Privacy and architecture](docs/architecture.md) ·
 [Release validation](docs/releasing.md)
+
+Windows development: the [standalone Micro host](docs/windows.md) is available as
+source for evaluation. It owns the device exclusively and supplies Codex, Claude,
+and Mixed task banks, with opt-in profile backup/restore. Start with `npm ci` and
+`npm run windows:doctor`. Physical Windows qualification is still pending.
+The separate [native service extension](docs/windows-service.md) remains a proposed
+integration that the current Store application does not load.
 
 ## Development
 

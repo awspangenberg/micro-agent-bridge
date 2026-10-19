@@ -1,1 +1,28 @@
-{"name":"micro-agent-bridge","version":"1.0.0-rc.1","private":true,"type":"module","license":"MIT","engines":{"node":">=22"},"scripts":{"test":"node --test tests/*.mjs && python3 tests/test-claude.py && python3 tests/test-hooks.py && node tests/test-bridge.cjs --claude && node tests/test-bridge.cjs --missing","check":"node scripts/check-release.mjs","build:deb":"python3 packaging/build_deb.py"}}
+{
+  "name": "micro-agent-bridge",
+  "version": "1.0.0-rc.1",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test tests/*.mjs && python3 tests/test-claude.py && python3 tests/test-hooks.py && node tests/test-bridge.cjs --claude && node tests/test-bridge.cjs --missing",
+    "test:micro": "node --test tests/test-micro-*.mjs",
+    "micro:doctor": "node src/micro-control.mjs doctor",
+    "micro:status": "node src/micro-control.mjs status",
+    "micro:watch": "node src/micro-control.mjs watch",
+    "check": "node scripts/check-release.mjs",
+    "build:deb": "python3 packaging/build_deb.py",
+    "test:windows": "node --test tests/*.mjs && python tests/test-windows-inventory.py && python tests/test-hooks.py && python tests/test-hooks-detail.py",
+    "windows:doctor": "node src/standalone-control.mjs doctor",
+    "windows:status": "node src/standalone-control.mjs status",
+    "windows:start": "node src/standalone-control.mjs start",
+    "windows:setup": "node src/standalone-control.mjs setup-profile",
+    "windows:restore": "node src/standalone-control.mjs restore-profile"
+  },
+  "dependencies": {
+    "node-hid": "3.4.0"
+  }
+}

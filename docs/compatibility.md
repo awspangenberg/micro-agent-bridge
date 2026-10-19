@@ -6,8 +6,14 @@
 | macOS 14+ ARM64 packaged helper | Build/test target | Not yet release-qualified |
 | Ubuntu 24.04/26.04 amd64 observer | Protocol and package test target | No service needed |
 | Ubuntu GNOME desktop Wayland/X11 | UI adapter implemented, native transport qualification pending | Blocked |
+| Windows x64 Micro service client | Named-pipe tests pass; Store 26.1013.4894.0 returns `no-client-found` for the extension | Blocked on host integration; no Windows helper release |
+| Windows x64 standalone host | Exclusive helper, RPC/profile/runtime tests; live sharing-violation refusal verified | Source evaluation; physical task/light/profile qualification pending |
 
-`src/compatibility.json` is the machine-readable contract. Unknown Codex bundle
+See [Windows standalone operation](windows.md) for setup and constraints, or
+[Windows service integration](windows-service.md) for the proposed native adapter.
+
+For the Mac/Linux native-service adapters, `src/compatibility.json` is the
+machine-readable contract. Unknown Codex bundle
 hashes disable HID attachment. Unknown Claude versions disable its selection/status.
 The helper does not promise compatibility with an automatic vendor update until
 that update is tested. Only a reviewed helper release changes the adapter manifest.

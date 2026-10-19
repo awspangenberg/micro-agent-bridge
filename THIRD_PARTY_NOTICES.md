@@ -14,3 +14,9 @@ versions, download locations, and SHA-256 digests are pinned in
 Ubuntu GUI dependencies (GTK, PyGObject, AT-SPI, AppIndicator) and Python are
 provided separately by Ubuntu's package manager under their respective licenses.
 Optional vendor installations are downloaded separately from vendor sources.
+
+The Windows source workflow installs `node-hid` 3.4.0 for device enumeration.
+Its distribution includes `LICENSE-bsd.txt` and HIDAPI's license files. The npm
+dependencies `node-addon-api` and `pkg-prebuilds` include their MIT licenses.
+Keep those notices with any redistributed dependencies. The Windows exclusive
+transport is implemented here; no extracted vendor SDK code is bundled.

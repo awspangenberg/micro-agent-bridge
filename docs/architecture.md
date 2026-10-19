@@ -15,6 +15,23 @@ No app bundle is edited. This is a version-dependent integration, not a public
 vendor hardware API. A second HID reader can crash the native app, and independent
 writers can corrupt multipart requests; neither is permitted.
 
+The proposed Windows integration uses `micro-client.mjs` and `micro-service.mjs`
+instead of inspector attachment. The host adapter must be loaded by the native
+device owner and bound to authenticated local IPC sessions. It grants only
+host-approved custom banks and calls a host-supplied wrapper around the existing
+queue. This code cannot attach itself to the current Store application. See
+[the integration contract](windows-service.md) for protocol and validation boundaries.
+
+The alternative Windows standalone host owns its RPC interface using a dedicated
+C# helper with exclusive Windows read/write handles. `node-hid` performs enumeration
+only. It provides all eighteen task slots using the native Codex task-status pipe,
+read-only provider metadata, and validated desktop navigation URIs. One serialized
+request queue handles lighting, status, and optional profile writes. Profile writes
+have exact-byte backups, readback verification, pending transactions, and restore
+conflict checks. No native app code is changed. Single-connection operation and
+topology limits are documented in [Windows standalone operation](windows.md).
+Windows lower action controls are not implemented.
+
 Task metadata (provider/host/native/navigation ID and title) supports discovery.
 Status storage/SSH transfer contains only identities, state, timestamps, sequence,
 and validated process identity. Prompt/tool contents are never retained or

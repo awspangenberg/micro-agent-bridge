@@ -4,6 +4,12 @@ from pathlib import Path
 
 PIN_SECTION = '01984de2-8f74-7c91-a3b2-5c5e937cf318'
 PIN_KEY = bytes.fromhex('000401010123') + 'store:pin-state:dframe-starred-code'.encode('utf-16be')
+# Chromium assigns IndexedDB database IDs per profile (4 on Mac, 5 seen on Windows).
+# Match object store 1 data rows in any one-byte database, never across databases.
+PIN_RECORD = PIN_KEY[4:]
+
+def pin_database(key):
+    return key[1] if len(key)==len(PIN_KEY) and key[0]==0 and key[2:4]==b'\x01\x01' and key[4:]==PIN_RECORD else None
 
 def varint(b, p):
     n = 0
@@ -112,14 +118,16 @@ def decode_json(value):
 def claude_pin_ids(root):
     current=(root/'CURRENT').read_bytes();name=current.decode().strip()
     if not name.startswith('MANIFEST-') or '/' in name:raise ValueError('Invalid manifest')
-    snapshot=(root/name).read_bytes();files,log,previous=manifest(snapshot);best=(-1,None)
+    snapshot=(root/name).read_bytes();files,log,previous=manifest(snapshot);latest={}
+    def observe(database,seq,value):
+        if database is not None and seq>latest.get(database,(-1,None))[0]:latest[database]=(seq,value)
     for number in files:
         path=root/f'{number:06d}.ldb'
         if not path.exists():path=root/f'{number:06d}.sst'
         for key,value in table(path):
-            if len(key)>8 and key[:-8]==PIN_KEY:
-                trailer=int.from_bytes(key[-8:],'little');seq=trailer>>8
-                if seq>best[0]:best=(seq,value if trailer&255 else None)
+            if len(key)>8:
+                trailer=int.from_bytes(key[-8:],'little')
+                observe(pin_database(key[:-8]),trailer>>8,value if trailer&255 else None)
     for path in root.glob('*.log'):
         if int(path.stem)<log and int(path.stem)!=previous:continue
         for batch in records(path.read_bytes()):
@@ -130,9 +138,11 @@ def claude_pin_ids(root):
                 if tag==1:value,p=string(batch,p)
                 elif tag==0:value=None
                 else:raise ValueError('Invalid batch tag')
-                if key==PIN_KEY and sequence+i>best[0]:best=(sequence+i,value)
+                observe(pin_database(key),sequence+i,value)
     if (root/'CURRENT').read_bytes()!=current or (root/name).read_bytes()!=snapshot:raise ValueError('Compaction during read; retry')
-    if best[0]<0:raise ValueError('Pin record unavailable')
+    if not latest:raise ValueError('Pin record unavailable')
+    if len(latest)>1:raise ValueError('Ambiguous pin databases')
+    best=next(iter(latest.values()))
     if best[1] is None:return []
     ids=decode_json(best[1])['state']['starredIds']
     if not isinstance(ids,list) or any(not isinstance(x,str) for x in ids):raise ValueError('Unsupported pin schema')
