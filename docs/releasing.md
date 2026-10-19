@@ -33,6 +33,20 @@ The Linux native transport qualification, Mac notarization credentials, and phys
 multi-platform acceptance are current blockers. Source CI must not publish releases
 merely because unit tests pass.
 
+## Windows installer
+
+Build on Windows x64 with `python packaging/build_windows.py`, which needs npm and
+Inno Setup 6. It bundles the pinned Node.js and Python runtimes, stages `node-hid`
+with only its win32-x64 prebuild, smoke-loads the CLI, and writes
+`Micro-Agent-Bridge-<version>-windows-x64-setup.exe`. Before publishing, do a
+silent per-user install into a temporary directory, run `doctor` with no system
+Node.js or Python on PATH, and confirm that uninstall removes the program files,
+the Run and PATH entries, and owned hooks, and keeps the state directory.
+
+The installer is not Authenticode-signed. List that as an unmet gate, along with
+the hardware items still open under Validation in `docs/windows.md`. Build every
+asset of a release into one directory so a single `SHA256SUMS` covers them all.
+
 ## Evaluation prereleases
 
 Prebuilt evaluation packages may be published manually as a GitHub prerelease

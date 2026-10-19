@@ -34,7 +34,8 @@ export class MicroServiceClient extends EventEmitter {
   async open(requested) {
     const socket=this.socket=net.connect(this.endpoint);
     let buffer=Buffer.alloc(0);
-    socket.on('error',error=>this.disconnect(error,socket));
+    // A peer reset can surface as ECONNRESET before 'close'; report it as a disconnect either way.
+    socket.on('error',error=>this.disconnect(Object.assign(Error('Codex IPC disconnected: '+error.message),{code:error.code,cause:error}),socket));
     socket.on('close',()=>this.disconnect(Error('Codex IPC disconnected'),socket));
     socket.on('data',bytes=>{
       if(this.socket!==socket)return;

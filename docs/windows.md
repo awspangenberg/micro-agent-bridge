@@ -3,9 +3,46 @@
 The standalone host owns the Codex Micro directly. It supplies three sets of six
 task keys: Codex on layer 1, Claude on layer 2, and Mixed on layer 3. It uses one
 reader and serializes complete HID RPC requests. It does not modify Codex or need
-an inspector. This is source for hardware evaluation, not a qualified binary release.
+an inspector. The installer and the source tree are for hardware evaluation; neither
+is a qualified release.
 
-## Run
+## Install
+
+The release installer (`Micro-Agent-Bridge-<version>-windows-x64-setup.exe`) needs
+Windows 10/11 x64 and Windows PowerShell 5.1, which Windows includes. It bundles
+Node.js and Python, installs per user to
+`%LOCALAPPDATA%\Programs\Micro Agent Bridge` without administrator access, and is
+not Authenticode-signed. Verify it against `SHA256SUMS` before running it.
+
+The installer adds these Start menu entries:
+
+| Entry | Runs |
+| --- | --- |
+| First-run setup (configure profile) | `start --supervise --configure-profile --consent` |
+| Start Micro host | `start --supervise` |
+| Doctor / Device status | `doctor` / `status` |
+| Restore keyboard profile | `restore-profile` |
+| Enable / Remove Claude status hooks | the owned hooks below, using the installed state directory |
+
+For the first run, quit Codex and Work Louder Input, open **First-run setup**, and
+wait for the exclusive-access confirmation. Then reopen Codex. Later sessions use
+**Start Micro host**. Each entry opens a console window; Ctrl+C stops the host and
+releases the device.
+
+Two installer options are off by default. *Start at sign-in* adds a per-user Run
+entry for `start --supervise` in a minimized console. *Add to PATH* puts the
+`micro-agent-bridge` command on the user PATH. That command takes the same
+commands and options as `standalone-control.mjs` below, plus
+`micro-agent-bridge hooks install|remove`.
+
+Setup and uninstall refuse to run while a host is running. Stop it with Ctrl+C
+first. Uninstall removes the program files, the Run entry, the PATH entry, and
+any hooks this package installed. It keeps
+`%LOCALAPPDATA%\Micro Agent Bridge\standalone`, which holds the profile backups.
+Run **Restore keyboard profile** before uninstalling if you want the original
+mappings back. Upgrades replace the program files and keep that directory.
+
+## Run from source
 
 Requires Windows x64, Node.js 22+, Python 3.10+, and Windows PowerShell 5.1.
 Run from a normal PowerShell terminal in this repository; no administrator access
@@ -37,7 +74,8 @@ npm run windows:start
 
 `windows-start.cmd` is an equivalent launcher that forwards options. Ctrl+C clears
 the lighting banks and releases the device; the native app can reacquire it.
-The host does not install a background service or start at login.
+Running from source installs no background service and no sign-in entry. Only the
+installer's opt-in *Start at sign-in* option adds one.
 
 ## Ownership and connections
 

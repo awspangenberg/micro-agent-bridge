@@ -12,14 +12,20 @@ Do not interpret a package building successfully as hardware qualification.
 
 ## Download the prerelease
 
-[**Download v1.0.0-rc.1**](https://github.com/awspangenberg/micro-agent-bridge/releases/tag/v1.0.0-rc.1)
+[**Download v1.0.0-rc.2**](https://github.com/awspangenberg/micro-agent-bridge/releases/tag/v1.0.0-rc.2)
 
-- [Ubuntu desktop installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/micro-agent-bridge_1.0.0-rc.1_amd64.deb)
-- [Ubuntu SSH observer installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/micro-agent-bridge-observer_1.0.0-rc.1_amd64.deb)
-- [SHA256 checksums](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.1/SHA256SUMS)
+- [Ubuntu desktop installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.2/micro-agent-bridge_1.0.0-rc.2_amd64.deb)
+- [Ubuntu SSH observer installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.2/micro-agent-bridge-observer_1.0.0-rc.2_amd64.deb)
+- [Windows x64 installer](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.2/Micro-Agent-Bridge-1.0.0-rc.2-windows-x64-setup.exe) (standalone Micro host, per-user, unsigned)
+- [SHA256 checksums](https://github.com/awspangenberg/micro-agent-bridge/releases/download/v1.0.0-rc.2/SHA256SUMS)
 
-These are prebuilt Ubuntu 24.04/26.04 x86-64 evaluation packages. Clean-machine
-installation tests passed; physical Linux keyboard acceptance remains pending.
+The Windows installer bundles Node.js and Python and needs no administrator
+access; see [Windows](docs/windows.md#install). It is not Authenticode-signed, so
+SmartScreen warns before running it. Verify its checksum first.
+
+The Ubuntu packages are prebuilt Ubuntu 24.04/26.04 x86-64 evaluation packages.
+Clean-machine installation tests passed for rc.1; physical Linux keyboard
+acceptance remains pending.
 Normal desktop startup stays disabled until qualification. The observer package
 supplies SSH reporting without a desktop or keyboard. Install one package per host.
 
@@ -39,18 +45,19 @@ does not host Debian or DMG installers.
 
 Download artifacts and SHA256SUMS from this project's GitHub Releases only.
 No compiler or Homebrew is required by the prebuilt Mac installer. Intel Macs,
-ARM Linux, Windows, other Linux desktop environments, and arbitrary app versions
-are not currently supported.
+ARM Linux, Windows on ARM, other Linux desktop environments, and arbitrary app
+versions are not currently supported. Windows x64 is supported only through the
+standalone host below.
 
 [Installation and removal](docs/installation.md) ·
 [Compatibility and limitations](docs/compatibility.md) ·
 [Privacy and architecture](docs/architecture.md) ·
 [Release validation](docs/releasing.md)
 
-Windows development: the [standalone Micro host](docs/windows.md) is available as
-source for evaluation. It owns the device exclusively and supplies Codex, Claude,
-and Mixed task banks, with opt-in profile backup/restore. Start with `npm ci` and
-`npm run windows:doctor`. Physical Windows qualification is still pending.
+Windows: the [standalone Micro host](docs/windows.md) ships as an evaluation
+installer, and runs from source with `npm ci` and `npm run windows:doctor`. It owns
+the device exclusively and supplies Codex, Claude, and Mixed task banks, with
+opt-in profile backup/restore. Physical Windows qualification is still pending.
 The separate [native service extension](docs/windows-service.md) remains a proposed
 integration that the current Store application does not load.
 
@@ -58,7 +65,8 @@ integration that the current Store application does not load.
 
 Node.js 22 and Python 3.10+ are required. `npm test` runs the focused tests.
 `npm run check` checks publication hygiene. `npm run build:deb` builds both Debian
-packages. Build the Mac app on Apple Silicon using `python3 packaging/build_macos.py`.
+packages. `python packaging/build_windows.py` builds the Windows installer on
+Windows (npm and Inno Setup 6 required). Build the Mac app on Apple Silicon using `python3 packaging/build_macos.py`.
 Signing and notarization are mandatory before publishing a release DMG.
 
 The project uses no provider API keys. Sign in to the desktop apps normally.
