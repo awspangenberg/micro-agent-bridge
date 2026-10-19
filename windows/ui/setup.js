@@ -11,6 +11,8 @@ const LAYER_LIGHTS = [
   Array(6).fill({color: COLORS.claude, motion: 'solid', level: .8}),
   [0, 1, 2, 3, 4, 5].map(i => ({color: i % 2 ? COLORS.claude : COLORS.codex, motion: 'solid', level: .8})),
 ];
+// The device lights waiting keys white; on screen a cool tint keeps them visible on white caps.
+const WAITING = {color: '#8fd3ff', motion: 'breathe', level: .85};
 let current = 'welcome', env = {}, statusInfo = null;
 const leave = {};
 
@@ -239,7 +241,7 @@ enter.test = async () => {
   for (const l of $$('#test-layers .layer')) l.classList.remove('passed');
   $('#test-next').disabled = true; note('#test-note');
   device.ring('steady', COLORS.white);
-  device.keysAll(Array(6).fill({color: COLORS.white, motion: 'breathe', level: .7}));
+  device.keysAll(Array(6).fill(WAITING));
   setLive('busy', 'Lighting the keys…');
   try { await call('keyTestStart'); }
   catch (e) { setLive('bad', 'The test couldn\'t start.'); note('#test-note', 'bad', [e.message]); }
@@ -261,7 +263,7 @@ on(message => {
       caption(`Layer ${e.layer}, key ${e.slot}`);
       setLive('busy', `${passed.size} of 3 layers done. ${passed.size < 3 ? 'Switch layers and press another.' : ''}`);
       // Each layer has its own lights; show the next layer's keys waiting again.
-      setTimeout(() => { if (current === 'test' && !testDone) device.keysAll(Array(6).fill({color: COLORS.white, motion: 'breathe', level: .7})); }, 700);
+      setTimeout(() => { if (current === 'test' && !testDone) device.keysAll(Array(6).fill(WAITING)); }, 700);
     }
     if (e.type === 'done') {
       testDone = true;

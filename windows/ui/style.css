@@ -12,7 +12,12 @@
   --cap-bottom: #d7dce1;
   --body-top: #c8cfd5;
   --body-bottom: #a9b2ba;
-  --plate: #bec6cd;
+  --plate: #f7f8f9;
+  --rim: #e3e7ea;
+  --nub: #8ea4e6;
+  --stick: #22262b;
+  --screw: #2a2e33;
+  --led: #eef5c4;
   --codex: #2f6bff;
   --claude: #ff9a1f;
   --ok: #17b26a;
@@ -29,7 +34,7 @@
   :root {
     --surface: #1d2227; --surface-hi: #262c32; --panel: #23292f; --ink: #e8ecef; --muted: #9aa5ae; --faint: #6f7a84;
     --line: #38414a; --well: #2b3238; --cap-top: #4a535c; --cap-bottom: #343c44; --body-top: #3b434b; --body-bottom: #2a3037;
-    --plate: #30373e; --primary-bg: #e8ecef; --primary-ink: #1b2128; --focus: #6d97ff;
+    --plate: #353c43; --rim: #444c54; --nub: #6f86c8; --stick: #15181b; --screw: #14171a; --led: #d9e3a6; --primary-bg: #e8ecef; --primary-ink: #1b2128; --focus: #6d97ff;
     color-scheme: dark;
   }
 }
@@ -156,7 +161,7 @@ label.consent input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: 
 code, .path { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; color: var(--muted); word-break: break-all; }
 
 /* ---------- device ---------- */
-.device { width: min(92%, 560px); height: auto; overflow: visible; }
+.device { width: min(82%, 500px); max-height: 76vh; height: auto; overflow: visible; }
 .device .ring-glow { transition: stroke .5s, opacity .5s; }
 .device .key-light { transition: fill .35s, opacity .35s; }
 .device .key { transform-box: fill-box; transform-origin: center; transition: transform .09s ease; }
