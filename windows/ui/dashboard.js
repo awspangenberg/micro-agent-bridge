@@ -20,7 +20,7 @@ device.svg.addEventListener('click', e => {
 });
 const NAMES = ['Codex', 'Claude', 'Mixed'];
 const BARS = ['var(--codex)', 'var(--claude)', 'linear-gradient(90deg, var(--codex) 0 50%, var(--claude) 50% 100%)'];
-let status = 'stopped', snapshot = null, shown = 0, physical = null, restoring = false;
+let status = 'stopped', snapshot = null, shown = 0, physical = null, restoring = false, profileUpdate = false;
 const welcome = new URLSearchParams(location.search).has('welcome');
 
 function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
@@ -86,6 +86,12 @@ function banner() {
     const b = el('button', 'btn small secondary', 'Open Codex'); b.addEventListener('click', () => call('openCodex'));
     c.append(t, b); box.append(c);
   }
+  if (profileUpdate) {
+    const c = el('div', 'callout'); const t = el('div');
+    t.append(el('p', '', 'The knob, joystick and action keys need a mapping update to work on the Claude layer.'));
+    const b = el('button', 'btn small secondary', 'Open setup'); b.addEventListener('click', () => call('openSetup'));
+    c.append(t, b); box.append(c);
+  }
   if (status === 'error') {
     const c = el('div', 'callout bad'); const t = el('div');
     t.append(el('p', '', 'Quit Codex and Work Louder Input if they took the Micro back, then start again.'));
@@ -143,3 +149,5 @@ $('#restore').addEventListener('click', async e => {
 const initial = await call('hostState');
 snapshot = initial.state?.snapshot ?? null;
 setStatus(initial.status, initial.message);
+// Ask once whether the profile predates lower-control mapping.
+call('controls').then(result => { profileUpdate = Boolean(parse(result)?.profileUpdate); banner(); }).catch(() => {});

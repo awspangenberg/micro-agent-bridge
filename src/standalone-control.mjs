@@ -3,7 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {enumerateMicroDevices, enumerateMicroTopology, WindowsHidHandle, MicroHidTransport, connectionGuard} from './standalone-hid.mjs';
-import {StandaloneProfile} from './standalone-profile.mjs';
+import {StandaloneProfile, MAPPING_VERSION} from './standalone-profile.mjs';
 import {StandaloneRuntime, readWindowsInventory} from './standalone-runtime.mjs';
 import {acquireLock} from './lock.mjs';
 import {RemoteClaudeStatus, remoteHosts} from './standalone-remotes.mjs';
@@ -120,7 +120,13 @@ async function command(options) {
   if (options.command === 'controls') {
     // What each lower control does on each layer, for the dashboard. Opens no device.
     const settings = readSettings(stateDirectory), codexLayout = readCodexLayout(options.home);
-    console.log(JSON.stringify({settings, codexSettingsFound: Boolean(codexLayout), mapping: effectiveMapping(settings, codexLayout),
+    // A profile mapped before lower controls existed needs setup's "Update mapping".
+    let profileUpdate = false;
+    try {
+      const record = JSON.parse(fs.readFileSync(path.join(stateDirectory, 'standalone-profile-ownership.json'), 'utf8'));
+      profileUpdate = record?.state === 'configured' && (record.mapping ?? 1) < MAPPING_VERSION;
+    } catch { /* No profile mapped by the bridge. */ }
+    console.log(JSON.stringify({settings, codexSettingsFound: Boolean(codexLayout), profileUpdate, mapping: effectiveMapping(settings, codexLayout),
       controls: CONTROLS, actions: Object.fromEntries(Object.entries(ACTIONS).map(([id, a]) => [id, {label: a.label,
         claude: supported(id, 'claude'), codex: supported(id, 'codex'), guarded: a.guard === 'approval'}]))}));
     return;

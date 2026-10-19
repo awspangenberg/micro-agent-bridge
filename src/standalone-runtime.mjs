@@ -83,8 +83,11 @@ const writeJson = (file, value) => { const temp = file + '.' + process.pid + '.t
 
 export class StandaloneRuntime extends EventEmitter {
   constructor({transport, inventory, topology, openTask = openWindowsTask, runAction = runWindowsAction, sendShortcut = sendCodexShortcut, openApp = openWindowsApp,
-    settings = () => readSettings(this.stateDirectory), codexLayout = () => readCodexLayout(), stateDirectory, codex = new CodexActivity(), remote = null, pollMs = 2000, now = Date.now}) {
-    super(); Object.assign(this, {transport, inventory, topology, openTask, runAction, sendShortcut, openApp, settings, codexLayout, stateDirectory, codex, remote, pollMs, now});
+    settings, codexLayout, stateDirectory, codex = new CodexActivity(), remote = null, pollMs = 2000, now = Date.now}) {
+    super(); Object.assign(this, {transport, inventory, topology, openTask, runAction, sendShortcut, openApp, stateDirectory, codex, remote, pollMs, now});
+    // Controls settings and Codex's Micro settings are read on each press, so edits apply at once.
+    this.settings = settings ?? (() => readSettings(stateDirectory));
+    this.codexLayout = codexLayout ?? (() => readCodexLayout());
     this.views = []; this.errors = {}; this.lastInventory = 0; this.lastPaint = []; this.stopped = false; this.selecting = false; this.bound = null;
     this.decoder = new ControlDecoder({now}); this.queue = Promise.resolve(); this.cursor = [null, null, null]; this.holding = null; this.lastActivity = null; this.attention = new Map();
     this.onInput = event => {
@@ -270,7 +273,8 @@ export class StandaloneRuntime extends EventEmitter {
   // Codex: its own shortcut, only to a Codex window in front. Approve and Reject only while a
   // pinned Codex task is waiting for approval, so Enter can't send a half-written prompt.
   async codexAction(spec) {
-    if (spec.guard === 'approval' && !this.views.some(v => v.slots.some(t => t?.provider === 'codex' && this.taskState(t) === 'approval')))
+    // Codex reports `approval` when its detail is known, otherwise the base `awaiting_input`.
+    if (spec.guard === 'approval' && !this.views.some(v => v.slots.some(t => t?.provider === 'codex' && ['approval', 'awaiting_input'].includes(this.taskState(t)))))
       return {performed: false, reason: 'no-codex-approval-waiting'};
     return this.sendShortcut(spec.codex);
   }
