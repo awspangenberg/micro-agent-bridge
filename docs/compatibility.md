@@ -7,7 +7,7 @@
 | Ubuntu 24.04/26.04 amd64 observer | Protocol and package test target | No service needed |
 | Ubuntu GNOME desktop Wayland/X11 | UI adapter implemented, native transport qualification pending | Blocked |
 | Windows x64 Micro service client | Named-pipe tests pass; Store 26.1013.4894.0 returns `no-client-found` for the extension | Blocked on host integration; no Windows helper release |
-| Windows x64 standalone host | Exclusive helper, RPC/profile/runtime tests; live sharing-violation refusal verified | Source evaluation; physical task/light/profile qualification pending |
+| Windows x64 standalone host | Exclusive helper, RPC/profile/runtime tests; live sharing-violation refusal verified | Evaluation installer (per-user, unsigned); physical recovery/activity-colour/lower-control qualification pending |
 
 See [Windows standalone operation](windows.md) for setup and constraints, or
 [Windows service integration](windows-service.md) for the proposed native adapter.

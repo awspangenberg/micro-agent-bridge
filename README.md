@@ -29,6 +29,40 @@ acceptance remains pending.
 Normal desktop startup stays disabled until qualification. The observer package
 supplies SSH reporting without a desktop or keyboard. Install one package per host.
 
+## Before you install
+
+Check these first so installation and the first run go smoothly.
+
+### Windows installer
+
+| Requirement | Details |
+| --- | --- |
+| Windows 10 or 11, x64 | ARM64 Windows is not supported. The installer refuses older versions. |
+| Windows PowerShell 5.1 and .NET Framework 4.x | Both ship with Windows 10/11. The HID helper compiles itself with them at runtime, so they must not be removed or disabled. |
+| Script policy that allows a bypass | The host starts PowerShell with `-ExecutionPolicy Bypass`. A Group Policy that enforces `AllSigned` or `Restricted` (check with `Get-ExecutionPolicy -List`), WDAC or AppLocker can block the helper. |
+| Permission to run unsigned installers | The installer is not code-signed. SmartScreen warns (*More info → Run anyway*). Windows 11 **Smart App Control**, when on, blocks it outright. Antivirus may need to allow `%LOCALAPPDATA%\Programs\Micro Agent Bridge`. |
+| About 150 MB free | The installer bundles Node.js and Python. You need no administrator rights and no separate Node.js or Python. |
+| Work Louder Codex Micro | Firmware 0.6.2 was verified. Use **one** connection, USB or Bluetooth, not both, and keep it unchanged while the host runs. |
+| Codex and/or Claude desktop apps | Installed and signed in. Microsoft Store Codex 26.1013 and Claude 2.42304 were verified. Pin the tasks you want in each app's sidebar; only pinned tasks get keys. |
+| Work Louder Input and Codex closed for the first run | The host needs exclusive access to the keyboard. Quit both before **First-run setup**, then reopen Codex once it reports it is running. |
+| Optional: OpenSSH client | Built into Windows. Needed only for status of pinned Claude sessions on other machines, discovered from `~/.ssh/config` and, optionally, Tailscale. |
+
+First-run setup backs up the keyboard profile and remaps the task keys on layers
+1–3. If the profile uses automatic app mappings (`linkedApps`), turn them off in
+Work Louder Input first, or setup refuses to run. After installing, run
+**Doctor** from the Start menu: it should list exactly one Codex Micro and your
+pin counts before you start the host.
+
+### Ubuntu packages
+
+| Requirement | Details |
+| --- | --- |
+| Ubuntu 24.04 or 26.04, x86-64 | `apt` installs the dependencies: Python 3.10+, OpenSSH client and the GTK/AppIndicator libraries. Install with `sudo apt install ./<file>.deb`, not `dpkg -i`, so dependencies resolve. |
+| One package per host | Desktop and observer conflict. Remove one before installing the other. |
+| Desktop package | An active GNOME session (Wayland or X11) and supported Codex/Claude desktop builds (see [compatibility](docs/compatibility.md)). Normal desktop start stays blocked until physical Linux qualification. |
+| Observer package | No desktop or keyboard needed. The desktop must reach the observer host over normal SSH with key authentication. |
+| Stop a running helper before upgrading | The package refuses to upgrade while `micro-agent-bridge` is running. |
+
 The Mac DMG is not available yet: signing/notarization and portable Mac acceptance
 remain release blockers. Version 1.0 will include the Mac installer when those gates
 pass. Downloads live in **Releases → Assets**; the separate GitHub Packages registry
