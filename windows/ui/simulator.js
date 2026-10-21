@@ -113,7 +113,12 @@ export async function call(cmd, args, emit) {
     case 'restore': await wait(1500); return ok({restored: true, changed: true});
     case 'hostState':
       clearInterval(ticker);
-      ticker = setInterval(() => host === 'running' && emit({event: 'host', data: {type: 'state', snapshot: snapshot()}}), 4000);
+      ticker = setInterval(() => {
+        if (host !== 'running') return;
+        emit({event: 'host', data: {type: 'state', snapshot: snapshot()}});
+        // Every so often, a knob turn on the layer shown, to preview live press feedback.
+        if (Math.random() < 0.3) emit({event: 'host', data: {type: 'action', action: {layer: 2, control: 'knobRight', action: 'nextTask', performed: true, reason: null}}});
+      }, 4000);
       return {status: host, message: 'Running over Bluetooth', transport: 'bluetooth', state: {snapshot: snapshot()}};
     case 'hostStop': host = 'stopped'; emit({event: 'status', status: 'stopped', message: ''}); return true;
     case 'hostStart':

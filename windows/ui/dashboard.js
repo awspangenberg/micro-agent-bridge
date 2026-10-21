@@ -109,6 +109,7 @@ on(message => {
       // Show which control ran, on the layer it ran on.
       if (e.action.layer - 1 !== shown) select(e.action.layer - 1);
       device.flashControl(e.action.control);
+      controls.pressed(e.action);
     }
     if (e.type === 'selected') {
       const id = (e.selected.layer - 1) * 6 + e.selected.slot - 1;

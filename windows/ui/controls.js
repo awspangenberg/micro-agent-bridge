@@ -165,6 +165,13 @@ export class ControlsView {
     return section;
   }
 
+  // A press reported by the running host: add it to the log without reloading the view.
+  pressed(entry) {
+    if (!this.data) return;
+    this.data.recent = [...(this.data.recent ?? []), {...entry, at: Date.now()}].slice(-40);
+    this.root.querySelector('.press-log')?.replaceWith(this.pressLog());
+  }
+
   // Clicking a control on the drawing jumps to its row.
   focus(name) {
     const control = name === 'knob' ? 'knobLeft' : name === 'stick' ? 'up' : name;
