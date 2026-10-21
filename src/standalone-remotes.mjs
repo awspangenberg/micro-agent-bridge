@@ -91,6 +91,8 @@ export class RemoteClaudeStatus {
       typeof t.navId === 'string' && t.navId.startsWith('session_')).map(t => t.navId))];
   }
   fresh(host) { return !!host && this.now() - host.at < 8000; }
+  // Exactly one fresh machine reports a live session with this bridge ID.
+  alive(navId) { return this.matches(navId).length === 1; }
   matches(navId) {
     return [...this.hosts.values()].filter(h => this.fresh(h)).flatMap(h => h.sessions.filter(s => s.alive && s.bridge === navId).map(s => ({host: h, session: s})));
   }

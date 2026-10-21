@@ -8,7 +8,9 @@ import {StandaloneRuntime, readWindowsInventory} from './standalone-runtime.mjs'
 import {acquireLock} from './lock.mjs';
 import {RemoteClaudeStatus, remoteHosts} from './standalone-remotes.mjs';
 import {clearFrame} from './micro-protocol.mjs';
-import {CONTROLS, ACTIONS, effectiveMapping, readSettings, readCodexLayout, supported} from './standalone-controls.mjs';
+import {CONTROLS, BRIDGE, KNOB_MODES, effectiveMapping, readSettings, readCodexLayout, runs, label} from './standalone-controls.mjs';
+import {loadCatalog} from './codex-catalog.mjs';
+import {readBindings, chordFor, keybindingsPath, ownedEntries} from './codex-keybindings.mjs';
 export {session as runSession};
 
 const help = `Windows standalone Micro host
@@ -126,9 +128,22 @@ async function command(options) {
       const record = JSON.parse(fs.readFileSync(path.join(stateDirectory, 'standalone-profile-ownership.json'), 'utf8'));
       profileUpdate = record?.state === 'configured' && (record.mapping ?? 1) < MAPPING_VERSION;
     } catch { /* No profile mapped by the bridge. */ }
-    console.log(JSON.stringify({settings, codexSettingsFound: Boolean(codexLayout), profileUpdate, mapping: effectiveMapping(settings, codexLayout),
-      controls: CONTROLS, actions: Object.fromEntries(Object.entries(ACTIONS).map(([id, a]) => [id, {label: a.label,
-        claude: supported(id, 'claude'), codex: supported(id, 'codex'), guarded: a.guard === 'approval'}]))}));
+    let recent = [];
+    try { const value = JSON.parse(fs.readFileSync(path.join(stateDirectory, 'controls-log.json'), 'utf8')); if (Array.isArray(value)) recent = value.slice(-40); } catch { /* Nothing pressed yet. */ }
+    const catalog = await loadCatalog(stateDirectory);
+    let bindings = [];
+    try { bindings = readBindings(); } catch { /* An unreadable keybindings.json is reported as no shortcuts. */ }
+    const codexKeys = command => Boolean(chordFor(command, catalog, bindings));
+    const describe = action => ({id: action, label: label(action, catalog), claude: runs(action, 'claude', {codexKeys}), codex: runs(action, 'codex', {codexKeys}),
+      registrable: action.startsWith('cmd:') && !codexKeys(action.slice(4)) || (action === 'ptt' && !codexKeys('globalDictationHold'))});
+    // Everything Codex offers: the bridge's own actions, Codex's keycap presets, and every command.
+    const actions = ['none', 'ptt', 'stop', ...Object.keys(BRIDGE), ...catalog.commands.map(c => `cmd:${c.id}`),
+      ...catalog.keycaps.filter(k => k.type === 'composer-text' && k.text).map(k => `text:${k.text}`), 'url:https://developers.openai.com'].map(describe);
+    const keycaps = catalog.keycaps.map(k => ({id: k.id, size: k.size, action: k.id === 'MIC' || k.id === 'MIC1' ? 'ptt' : k.id === 'CODEX' ? 'openApp'
+      : k.type === 'command' ? `cmd:${k.command}` : k.type === 'composer-text' ? `text:${k.text}` : k.type === 'external-url' ? 'url:https://developers.openai.com' : 'none'}));
+    console.log(JSON.stringify({settings, codexSettingsFound: Boolean(codexLayout), codexVersion: catalog.version, profileUpdate, recent,
+      mapping: effectiveMapping(settings, codexLayout, {catalog, codexKeys}), controls: CONTROLS, actions, keycaps, knobModes: Object.keys(KNOB_MODES),
+      shortcuts: {enabled: settings.codexShortcuts, file: keybindingsPath(), registered: ownedEntries(stateDirectory)}}));
     return;
   }
   let devices = await enumerateMicroDevices();

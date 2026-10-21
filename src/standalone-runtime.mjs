@@ -4,12 +4,13 @@ import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
-import {allocate, pinIdentity} from './slots.mjs';
+import {allocate, allocateRecent, pinIdentity} from './slots.mjs';
 import {clearFrame} from './micro-protocol.mjs';
 import {CodexActivity} from './standalone-activity.mjs';
 import {slotLight, ambientLight} from './standalone-palette.mjs';
-import {ControlDecoder, ACTIONS, LAYERS, effectiveMapping, readSettings, readCodexLayout, supported} from './standalone-controls.mjs';
-export {ACTIONS};
+import {ControlDecoder, CLAUDE, BRIDGE, LAYERS, effectiveMapping, readSettings, readCodexLayout, runs, providersFor, usedCodexCommands} from './standalone-controls.mjs';
+import {FALLBACK, loadCatalog} from './codex-catalog.mjs';
+import {readBindings, chordFor, sync as syncCodexShortcuts, removeAll as removeCodexShortcuts, ownedEntries} from './codex-keybindings.mjs';
 
 const run = promisify(execFile);
 export async function readWindowsInventory({python = 'python', home, claudeData, stateDirectory} = {}) {
@@ -43,10 +44,16 @@ export async function openWindowsTask(task) {
   {windowsHide: true, timeout: 10000, env: {...process.env, MICRO_AGENT_BRIDGE_URL: url}});
 }
 
-export function reconcileViews(previous = [], inventory) {
-  const sources = ['codex', 'claude'].map(provider => ({provider, host: 'local',
-    available: !inventory.errors[provider], tasks: inventory[provider]}));
-  return [allocate(previous[0], sources.slice(0, 1)), allocate(previous[1], sources.slice(1)), allocate(previous[2], sources)];
+// modes: per layer, 'pinned' (default) or 'recent' (the six most recently active tasks).
+export function reconcileViews(previous = [], inventory, modes = ['pinned', 'pinned', 'pinned']) {
+  const sources = recent => ['codex', 'claude'].map(provider => ({provider, host: 'local',
+    available: !inventory.errors[provider], tasks: (recent ? inventory[provider + 'Recent'] : inventory[provider]) ?? []}));
+  return [[0, 1], [1, 2], [0, 2]].map(([from, to], layer) => {
+    const recent = modes[layer] === 'recent', chosen = sources(recent).slice(from, to);
+    // Switching mode starts the layer afresh rather than mixing the two orders.
+    const prior = (previous[layer]?.mode === 'recent') === recent ? previous[layer] : undefined;
+    return recent ? allocateRecent(prior, chosen) : allocate(prior, chosen);
+  });
 }
 // Each slot uses the shared palette; working and inactive use the provider colour
 // so Codex (blue) and Claude (amber) stay distinguishable on every layer.
@@ -54,19 +61,28 @@ export const standaloneFrame = (states, layer, providers = []) => {
   if (![0, 1, 2].includes(layer)) throw Error('Invalid standalone layer');
   return states.map((state, i) => slotLight(state, providers[i], layer * 6 + i));
 };
-export async function runWindowsAction(labels, ids, mode = 'invoke') {
+// Claude: op is invoke | on | off (a hold button) | menu-toggle | effort | plan | scroll.
+export async function runWindowsAction(op, {labels = [], ids = [], arg = ''} = {}) {
   if (process.platform !== 'win32') throw Error('Windows actions require Windows');
   const script = fileURLToPath(new URL('./windows-actions.ps1', import.meta.url));
   const {stdout} = await run('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', script,
-    '-Names', labels.join('|'), '-Ids', ids.join('|'), '-Mode', mode], {windowsHide: true, timeout: 15000, maxBuffer: 65536});
+    '-Op', op, '-Names', labels.join('|') || '-', '-Ids', ids.join('|'), '-Arg', String(arg) || '-'], {windowsHide: true, timeout: 15000, maxBuffer: 65536});
   return JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
 }
-export async function sendCodexShortcut(chord) {
+// Codex: phase is tap | down | up (a held shortcut, for push to talk); or text to write.
+export async function sendCodexShortcut(chord, phase = 'tap', text = null) {
   if (process.platform !== 'win32') throw Error('Windows shortcuts require Windows');
   const script = fileURLToPath(new URL('./windows-keys.ps1', import.meta.url));
-  const {stdout} = await run('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-Chord', chord],
+  const args = text !== null ? ['-Text', text] : ['-Chord', chord, '-Phase', phase];
+  const {stdout} = await run('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, ...args],
     {windowsHide: true, timeout: 10000, maxBuffer: 65536});
   return JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
+}
+export async function openWindowsUrl(url) {
+  if (!/^https:\/\/[^\s"]{1,300}$/.test(url)) throw Error('Only https links open');
+  await run('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', 'Start-Process -FilePath $env:MICRO_AGENT_BRIDGE_URL'],
+    {windowsHide: true, timeout: 10000, env: {...process.env, MICRO_AGENT_BRIDGE_URL: url}});
+  return {performed: true};
 }
 // Store app identities; opening by identity needs no URL handler.
 export const APP_IDS = {codex: 'OpenAI.Codex_2p2nqsd0c76g0!App', claude: 'Claude_pzs8sxrjxfjjc!Claude'};
@@ -83,11 +99,14 @@ const writeJson = (file, value) => { const temp = file + '.' + process.pid + '.t
 
 export class StandaloneRuntime extends EventEmitter {
   constructor({transport, inventory, topology, openTask = openWindowsTask, runAction = runWindowsAction, sendShortcut = sendCodexShortcut, openApp = openWindowsApp,
-    settings, codexLayout, stateDirectory, codex = new CodexActivity(), remote = null, pollMs = 2000, now = Date.now}) {
-    super(); Object.assign(this, {transport, inventory, topology, openTask, runAction, sendShortcut, openApp, stateDirectory, codex, remote, pollMs, now});
-    // Controls settings and Codex's Micro settings are read on each press, so edits apply at once.
+    openUrl = openWindowsUrl, settings, codexLayout, catalog, bindings, stateDirectory, codex = new CodexActivity(), remote = null, pollMs = 2000, now = Date.now}) {
+    super(); Object.assign(this, {transport, inventory, topology, openTask, runAction, sendShortcut, openApp, openUrl, stateDirectory, codex, remote, pollMs, now});
+    // Controls settings, Codex's Micro settings and Codex's keybindings are read on each press,
+    // so edits apply at once. The Codex catalog loads once at start.
     this.settings = settings ?? (() => readSettings(stateDirectory));
     this.codexLayout = codexLayout ?? (() => readCodexLayout());
+    this.bindings = bindings ?? (() => { try { return readBindings(); } catch { return []; } });
+    this.catalog = catalog ?? FALLBACK; this.loadCatalog = !catalog;
     this.views = []; this.errors = {}; this.lastInventory = 0; this.lastPaint = []; this.stopped = false; this.selecting = false; this.bound = null;
     this.decoder = new ControlDecoder({now}); this.queue = Promise.resolve(); this.cursor = [null, null, null]; this.holding = null; this.lastActivity = null; this.attention = new Map();
     this.onInput = event => {
@@ -109,6 +128,7 @@ export class StandaloneRuntime extends EventEmitter {
         }
       } catch { /* Fresh allocation on missing or invalid cache. */ }
     }
+    if (this.loadCatalog) this.catalog = await loadCatalog(this.stateDirectory).catch(() => FALLBACK);
     this.transport.on('input', this.onInput); this.transport.on('closed', this.onClosed);
     this.transport.on('stick', this.onStick); this.transport.on('radial', this.onRadial);
     this.onLayer = event => { this.lastPaint = []; this.emit('layer', event.layerIndex); };
@@ -148,7 +168,12 @@ export class StandaloneRuntime extends EventEmitter {
       if (this.stopped) return;
       this.checkAwake();
       this.errors = data.errors; this.lastInventory = Date.now();
-      this.views = reconcileViews(this.views, data);
+      // Remote candidates (bridge pins no local session owns) appear only while a reachable
+      // machine reports them live, as Claude's own sidebar does.
+      const candidates = (data.claude ?? []).filter(t => t.remoteCandidate);
+      if (candidates.length) data = {...data, claude: data.claude.filter(t => !t.remoteCandidate || this.remote?.alive?.(t.navId))};
+      const layersConf = this.settings().layers;
+      this.views = reconcileViews(this.views, data, LAYERS.map(l => layersConf[l].agentKeys));
       if (this.stateDirectory) {
         fs.mkdirSync(this.stateDirectory, {recursive: true});
         writeJson(path.join(this.stateDirectory, 'standalone-slots.json'), this.views);
@@ -158,7 +183,8 @@ export class StandaloneRuntime extends EventEmitter {
       }
       this.codex.update([...new Map(this.views.flatMap(v => v.slots).filter(t => t?.provider === 'codex').map(t => [pinIdentity(t), t])).values()]);
       this.codex.connect();
-      if (this.remote) { this.remote.update(this.views.flatMap(v => v.slots)); this.remote.tick(); }
+      if (this.remote) { this.remote.update([...this.views.flatMap(v => v.slots), ...candidates]); this.remote.tick(); }
+      this.syncShortcuts();
       // When each task started waiting for you: for "next task needing you" and the Mixed app key.
       const waiting = new Set();
       for (const t of this.views.flatMap(v => v.slots)) {
@@ -228,37 +254,64 @@ export class StandaloneRuntime extends EventEmitter {
       // The Claude and Mixed layers share codes; the device says which layer is active.
       const status = await this.transport.rpc('device.status');
       layer = status?.layer_index;
-      if (layer !== 1 && layer !== 2) return;
+      if (layer !== 1 && layer !== 2) { this.record({layer: Number.isInteger(layer) ? layer + 1 : null, control: decoded.control, action: null, performed: false, reason: 'layer-unknown'}); return; }
     }
     this.layerIndex = layer;
-    const entry = effectiveMapping(this.settings(), this.codexLayout())[LAYERS[layer]][decoded.control];
-    if (!entry || entry.action === 'none') return;
-    const hold = decoded.control === 'mic' && ACTIONS[entry.action]?.claude?.hold;
+    const entry = this.mapping()[LAYERS[layer]][decoded.control];
+    if (!entry || entry.action === 'none') { this.record({layer: layer + 1, control: decoded.control, action: 'none', performed: false, reason: 'unassigned'}); return; }
+    // Push to talk holds for as long as the key is down.
+    const hold = entry.action === 'ptt' && decoded.control === 'mic';
     const result = await this.perform(entry.action, layer, decoded.control, hold ? 'on' : 'invoke');
-    if (hold && result.performed) this.holding = {control: decoded.control, action: entry.action, layer};
+    if (hold && result.performed) this.holding = {control: decoded.control, action: entry.action, layer, provider: result.provider};
   }
+  codexKeys = command => Boolean(chordFor(command, this.catalog, this.bindings()));
+  mapping() { return effectiveMapping(this.settings(), this.codexLayout(), {catalog: this.catalog, codexKeys: this.codexKeys}); }
   async perform(action, layer, control, mode) {
-    const spec = ACTIONS[action];
     let result;
     try {
-      if (spec.bridge) result = await this.bridgeAction(action, layer);
+      if (BRIDGE[action] !== undefined && !action.startsWith('scroll')) result = await this.bridgeAction(action, layer);
+      else if (action.startsWith('url:')) result = await this.openUrl(action.slice(4));
       else {
         // Codex's layer acts on Codex; the Claude layer on Claude; Mixed on whichever app is in front.
-        const providers = layer === 0 ? ['codex'] : layer === 1 ? ['claude'] : ['claude', 'codex'];
         result = {performed: false, reason: 'unsupported'};
-        for (const provider of providers) {
-          if (!supported(action, provider)) continue;
-          result = provider === 'claude' ? await this.claudeAction(spec, layer, mode) : await this.codexAction(spec);
-          if (result.performed) { this.noteActivity(provider); break; }
+        for (const provider of providersFor(layer)) {
+          if (mode === 'off' && this.holding && provider !== (this.holding.provider ?? provider)) continue;
+          if (!runs(action, provider, {codexKeys: this.codexKeys})) continue;
+          result = provider === 'claude' ? await this.claudeAction(action, layer, mode) : await this.codexAction(action, mode);
+          if (result.performed) { this.noteActivity(provider); result.provider = provider; break; }
           if (!/^foreground-not-/.test(result.reason ?? '')) break;
         }
       }
     } catch (error) { result = {performed: false, reason: 'error', message: error.message}; }
-    if (mode !== 'off') this.emit('action', {layer: layer + 1, control, action, performed: result.performed === true, reason: result.reason ?? null});
+    if (mode !== 'off') this.record({layer: layer + 1, control, action, performed: result.performed === true, reason: result.reason ?? null});
     return result;
   }
+  // With the person's opt-in, keep Codex shortcuts registered for exactly the Codex commands the
+  // controls use; without it, remove any the bridge added. Runs when the mapping changes.
+  syncShortcuts() {
+    if (!this.stateDirectory || !this.loadCatalog) return;
+    try {
+      const settings = this.settings();
+      const wanted = settings.codexShortcuts ? usedCodexCommands(effectiveMapping(settings, this.codexLayout(), {catalog: this.catalog, codexKeys: () => true})) : [];
+      const key = JSON.stringify([settings.codexShortcuts, wanted.sort()]);
+      if (key === this.shortcutKey) return;
+      if (settings.codexShortcuts) {
+        const result = syncCodexShortcuts(wanted, this.catalog, this.stateDirectory);
+        if (result.added.length || result.removed.length) this.emit('notice', `Codex shortcuts updated (${result.added.length} added, ${result.removed.length} removed). Restart Codex if new ones don't respond.`);
+      } else if (ownedEntries(this.stateDirectory).length) removeCodexShortcuts(this.stateDirectory);
+      this.shortcutKey = key;
+    } catch (error) { this.emit('notice', 'Codex shortcuts: ' + error.message); this.shortcutKey = null; }
+  }
+  // Every press and its outcome, for the dashboard and controls-log.json (last 40).
+  record(entry) {
+    this.recent = [...(this.recent ?? []), {...entry, at: this.now()}].slice(-40);
+    if (this.stateDirectory) try { writeJson(path.join(this.stateDirectory, 'controls-log.json'), this.recent); } catch { /* Diagnostics only. */ }
+    this.emit('action', entry);
+  }
   // Claude: the named button in the front Claude window, only when that window shows an allowed task.
-  async claudeAction(spec, layer, mode) {
+  async claudeAction(action, layer, mode) {
+    const spec = CLAUDE[action.startsWith('cmd:') ? action.slice(4) : action] ?? (action.startsWith('scroll') ? {scroll: action === 'scrollUp' ? -1 : 1} : null);
+    if (!spec) return {performed: false, reason: 'unsupported'};
     if (this.errors.claude || this.now() - this.lastInventory > 10000) return {performed: false, reason: 'claude-unavailable'};
     let tasks;
     if (this.settings().target === 'opened') {
@@ -267,16 +320,26 @@ export class StandaloneRuntime extends EventEmitter {
       tasks = [task];
     } else tasks = this.views[layer]?.slots.filter(t => t?.provider === 'claude' && t.host === 'local') ?? [];
     const ids = [...new Set(tasks.flatMap(t => [t.navId, ...(Array.isArray(t.bridges) ? t.bridges : [])]).filter(id => typeof id === 'string'))];
-    if (!ids.length) return {performed: false, reason: 'no-pinned-claude-task'};
-    return this.runAction(spec.claude.labels, ids, mode === 'invoke' ? 'invoke' : mode);
+    if (!ids.length) return {performed: false, reason: 'no-claude-task-on-layer'};
+    if (spec.scroll) return this.runAction('scroll', {ids, arg: spec.scroll});
+    if (spec.labels) return this.runAction(spec.hold ? mode : 'invoke', {labels: spec.labels, ids});
+    const menu = spec.menu;
+    if (menu.toggle) return this.runAction('menu-toggle', {labels: [menu.opener], ids, arg: menu.toggle});
+    if (menu.step) return this.runAction('effort', {labels: [menu.opener, menu.submenu], ids, arg: menu.step});
+    // Plan mode toggles between Plan and the mode chosen before it.
+    return this.runAction('plan', {labels: menu.opener, ids, arg: menu.plan});
   }
-  // Codex: its own shortcut, only to a Codex window in front. Approve and Reject only while a
-  // pinned Codex task is waiting for approval, so Enter can't send a half-written prompt.
-  async codexAction(spec) {
-    // Codex reports `approval` when its detail is known, otherwise the base `awaiting_input`.
-    if (spec.guard === 'approval' && !this.views.some(v => v.slots.some(t => t?.provider === 'codex' && ['approval', 'awaiting_input'].includes(this.taskState(t)))))
+  // Codex: its own shortcut (default, the person's, or one the bridge registered), only to a
+  // Codex window in front. Approve and Reject only while a pinned Codex task is waiting for
+  // approval, so Enter can't send a half-written prompt.
+  async codexAction(action, mode) {
+    if (action.startsWith('text:')) return this.sendShortcut(null, 'tap', action.slice(5));
+    const command = action === 'ptt' ? 'globalDictationHold' : action.slice(4);
+    if (/^approval\./.test(command) && !this.views.some(v => v.slots.some(t => t?.provider === 'codex' && ['approval', 'awaiting_input'].includes(this.taskState(t)))))
       return {performed: false, reason: 'no-codex-approval-waiting'};
-    return this.sendShortcut(spec.codex);
+    const chord = chordFor(command, this.catalog, this.bindings());
+    if (!chord) return {performed: false, reason: 'no-codex-shortcut'};
+    return this.sendShortcut(chord, mode === 'on' ? 'down' : mode === 'off' ? 'up' : 'tap');
   }
   layerTasks(layer) { return (this.views[layer]?.slots ?? []).map((t, i) => t && {task: t, slot: i}).filter(Boolean); }
   async openSlot(layer, slot) {

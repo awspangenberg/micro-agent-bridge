@@ -73,14 +73,33 @@ def codex_inventory(home):
     # as_uri quotes #, %, spaces, and Windows drive paths before adding options.
     # Do not use immutable=1: the live desktop database may have committed WAL data.
     with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=.5)) as db:
+        columns = {row[1] for row in db.execute('PRAGMA table_info(threads)')}
+        # Newer Codex builds also flag pins with is_pinned.
+        pinned = ' OR is_pinned=1' if 'is_pinned' in columns else ''
         rows = db.execute(
-            'SELECT id,title,archived FROM threads WHERE thread_section_id=? ORDER BY section_position ASC',
+            f'SELECT id,title,archived FROM threads WHERE thread_section_id=?{pinned} ORDER BY section_position ASC',
             (PIN_SECTION,),
         ).fetchall()
+    return codex_rows(rows)
+
+
+def codex_rows(rows):
     return [dict(provider='codex', host='local', hostId='local', nativeId=sid,
                  navId=sid, title=title if isinstance(title, str) else 'Codex task',
                  archived=bool(archived))
             for sid, title, archived in rows if native_id(sid)]
+
+
+def codex_recent(home, limit=12):
+    """Codex's own recency order (its "recent" agent-key mode), unarchived tasks only."""
+    path = home / '.codex/state_5.sqlite'
+    if not path.is_file():
+        return []
+    with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=.5)) as db:
+        columns = {row[1] for row in db.execute('PRAGMA table_info(threads)')}
+        order = next((c for c in ('recency_at_ms', 'updated_at_ms') if c in columns), 'updated_at * 1000')
+        rows = db.execute(f'SELECT id,title,archived,{order} FROM threads WHERE archived=0 ORDER BY {order} DESC LIMIT ?', (limit,)).fetchall()
+    return [dict(row, activity=activity or 0) for row, (*_, activity) in zip(codex_rows([r[:3] for r in rows]), rows)]
 
 
 def process_info(pid):
@@ -183,7 +202,7 @@ def live_registry(home, claude_data):
             if not trusted_claude_executable(info.get('executable'), home, claude_data):
                 continue
             row = {'bridge': bridge_id(data.get('bridgeSessionId')), 'nativeState': data.get('status'),
-                   'identity': f'{pid}:{started}'}
+                   'identity': f'{pid}:{started}', 'activity': path.stat().st_mtime * 1000}
             if sid in live and live[sid]['identity'] != row['identity']:
                 ambiguous.add(sid)
             live[sid] = row
@@ -212,9 +231,11 @@ def local_metadata(base, errors):
                 remote.update(ids)
                 continue
             title = data.get('title')
-            rows.append({'nativeId': native_id(data.get('cliSessionId')), 'ids': ids,
+            activity = data.get('lastActivityAt')
+            rows.append({'nativeId': native_id(data.get('cliSessionId')), 'ids': ids, 'nav': nav,
                          'title': title[:256] if isinstance(title, str) else 'Claude task',
-                         'archived': bool(data.get('isArchived'))})
+                         'archived': bool(data.get('isArchived')),
+                         'activity': activity if isinstance(activity, (int, float)) else 0})
         except (OSError, ValueError, TypeError):
             errors['claude'] = 'session-metadata-unavailable'
     return rows, remote
@@ -249,16 +270,30 @@ def hook_detail(state_dir, sid, live):
     return fine if fine in FINAL else 'unknown'
 
 
-def claude_inventory(home, base, errors, state_dir=None):
+def claude_inventory(home, base, errors, state_dir=None, recent_limit=0):
+    """Pinned Claude tasks, and with recent_limit the most recently active local tasks."""
     pins = list(dict.fromkeys(pin for pin in claude_pin_ids(
         base / 'IndexedDB/https_claude.ai_0.indexeddb.leveldb') if navigation_id(pin)))
     metadata, remote = local_metadata(base, errors)
     live = live_registry(home, base)
-    mappings = Catalog(home).pins(pins, 'local', live)
-    result = []
-    for nav in pins:
-        if nav in remote:
-            continue
+    # Recent: desktop sessions by their last activity, plus running terminal sessions that
+    # Claude lists through Remote Control (navigable by their bridge ID).
+    candidates = [(r['activity'], r['nav']) for r in metadata if not r['archived']]
+    owned = {i for r in metadata for i in r['ids']}
+    candidates += [(row['activity'], row['bridge']) for row in live.values() if row.get('bridge') and row['bridge'] not in owned]
+    ordered = sorted(candidates, key=lambda c: -c[0])
+    recent_navs = list(dict.fromkeys(nav for _, nav in ordered))[:recent_limit]
+    activity = {}
+    for when, nav in ordered: activity.setdefault(nav, when)
+    mappings = Catalog(home).pins(list(dict.fromkeys(pins + recent_navs)), 'local', live)
+    pinned = [row for nav in pins if nav not in remote
+              if (row := claude_row(nav, metadata, mappings, live, state_dir))]
+    recent = [dict(claude_row(nav, metadata, mappings, live, state_dir), activity=activity[nav]) for nav in recent_navs]
+    return pinned, recent
+
+
+def claude_row(nav, metadata, mappings, live, state_dir):
+    if True:
         matches = [row for row in metadata if nav in row['ids']]
         meta = matches[0] if len(matches) == 1 else {}
         mapped = [row for row in mappings if row['navId'] == nav and native_id(row.get('nativeId'))]
@@ -271,10 +306,19 @@ def claude_inventory(home, base, errors, state_dir=None):
         title = meta.get('title')
         if not title and len(mapped_ids) == 1:
             title = mapped[0].get('title')
+        # Claude keeps stars on Remote Control sessions after they end but hides them. A bridge
+        # pin is shown only when a local session or running process owns it; otherwise it is a
+        # remote candidate, shown only while another machine reports it live.
+        remote_candidate = (nav.startswith('session_') and not meta and
+                            not (sid and live.get(sid, {}).get('bridge') == nav))
+        if remote_candidate:
+            sid = None
         row = dict(provider='claude', host='local', nativeId=sid, navId=nav,
                    title=title or 'Claude task ' + nav[-8:],
                    archived=meta.get('archived', False),
                    state={'busy': 'working', 'waiting': 'awaiting_input'}.get(live.get(sid, {}).get('nativeState'), 'unknown'))
+        if remote_candidate:
+            row['remoteCandidate'] = True
         if state_dir is not None:
             row['detail'] = hook_detail(state_dir, sid, live) if sid else 'unknown'
             # Bridge IDs let task-bound actions match the session in Claude's window URL.
@@ -282,20 +326,20 @@ def claude_inventory(home, base, errors, state_dir=None):
             if live.get(sid, {}).get('bridge'):
                 bridges.add(live[sid]['bridge'])
             row['bridges'] = sorted(bridges)[:16]
-        result.append(row)
-    return result
+        return row
 
 
-def inventory(home=None, claude_data=None, state_dir=None):
+def inventory(home=None, claude_data=None, state_dir=None, recent=12):
     home = Path(home) if home is not None else Path.home()
     base = Path(claude_data) if claude_data is not None else default_claude_data(home)
-    result = {'codex': [], 'claude': [], 'errors': {}}
+    result = {'codex': [], 'claude': [], 'codexRecent': [], 'claudeRecent': [], 'errors': {}}
     try:
         result['codex'] = codex_inventory(home)
+        result['codexRecent'] = codex_recent(home, recent)
     except (OSError, sqlite3.Error, ValueError):
         result['errors']['codex'] = 'pin-metadata-unavailable'
     try:
-        result['claude'] = claude_inventory(home, base, result['errors'], state_dir)
+        result['claude'], result['claudeRecent'] = claude_inventory(home, base, result['errors'], state_dir, recent)
     except (OSError, ValueError, TypeError, KeyError, IndexError):
         result['errors']['claude'] = 'pin-metadata-unavailable'
     return result

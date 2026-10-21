@@ -143,9 +143,17 @@ the host keeps retrying until Codex releases it; quit Codex to hand it back.
 
 ## Tasks and controls
 
-Pin local tasks in the app sidebars. Assignments retain their positions; newly
-observed pins use the recent-pin allocator. Mixed starts with Codex/Claude
-interleaving. A task key opens its validated desktop URI.
+Each layer's six task keys show either its pinned tasks (the default) or its six
+most recent tasks; choose per layer under *Agent keys* in the Controls view.
+Pinned: pin local tasks in the app sidebars. Assignments retain their positions;
+newly observed pins use the recent-pin allocator, and Mixed starts with Codex/Claude
+interleaving. Most recent: the six tasks with the latest activity (Codex threads,
+Claude desktop sessions and live Remote Control sessions); a task that stays in
+the six keeps its key. A task key opens its validated desktop URI.
+
+Claude keeps stars for Remote Control sessions that have ended, and hides them in
+its own sidebar. The bridge hides them too: a `session_…` pin with no local
+session behind it appears only while a reachable host reports it alive.
 
 Codex state comes from its local named pipe, including what the active turn is
 doing (plan mode, reasoning, command, file change). Claude state comes from its
@@ -228,39 +236,58 @@ where that comes from. You can change any of them there.
 **What a control does.** With *Follow Codex settings* on (the default), each layer
 uses what Codex assigns to that control in its own Micro settings
 (`~/.codex/config.toml`, `[desktop.codex-micro-layout]`), so Codex stays the one
-place to configure them. Where Codex's choice can't run on that layer, for example
-FAST or plan mode in Claude, the bridge default applies instead:
+place to configure them. That includes the knob mode Codex offers (task
+navigation, reasoning effort, conversation scroll). Where Codex's choice can't run
+on that layer, the bridge default applies instead:
 
 | Control | Bridge default |
 |---|---|
-| Bolt, check, cross, branch | Stop the running turn, Approve, Reject, New task |
-| Microphone | Dictate while held |
+| Bolt, check, cross, branch | Stop the running turn, Approve, Decline, New task |
+| Microphone | Push to talk while held |
 | Bottom-right key | Open the app: Codex on layer 1, Claude on layer 2, and on layer 3 whichever app most recently asked for you or was acted on |
-| Knob left/right, press, hold | Previous/next pinned task on this layer (opening it), open the selected task, next task needing you |
-| Joystick up/down/left/right | Previous/next pinned task, Back, Forward |
+| Knob left/right, press, hold | Previous/next task on this layer (opening it), open the selected task, next task needing you |
+| Joystick up/down/left/right | Previous/next task, Back, Forward |
 
-Choosing an action in the Controls view overrides it for that layer; *Reset*
-returns to the followed or default action.
+The Controls view offers every option Codex has: the bridge's own actions, Codex's
+keycap presets, text keycaps such as `:yolo:`, and every Codex command (read from
+the installed Codex app, so the list matches its version). Its *Knob* setting sets
+the knob for a layer, including *Thinking level* (turn right to raise reasoning
+effort, left to lower it). Choosing an action for a control overrides it for that
+layer; *Reset* returns to the followed or default action. *Recent presses* lists
+the last presses and why any did nothing (also kept in `controls-log.json` in the
+state directory).
 
-**Claude** (layer 2, and layer 3 when a Claude window is in front). Each action
-invokes one enabled, visible button with the expected name through UI Automation,
-after checking that the foreground window is the installed Claude app and that its
-document URL names an allowed session. By default, the allowed sessions are the
-pinned Claude tasks on that layer (*the pinned task in front*). With *the task
-last opened with its key*, only the Claude task last opened by its key qualifies,
-for 15 minutes. Dictation toggles Claude's "Press and hold to record" button on
-when the key goes down and off when it comes up. No keystrokes are sent to Claude.
+**Claude** (layer 2, and layer 3 when a Claude window is in front). Claude has no
+shortcut interface, so each action uses a named control in its window through UI
+Automation, after checking that the foreground window is the installed Claude app
+and that its document URL names an allowed session: Approve/Decline, New session,
+Back/Forward, sidebar, Stop, Send, Add files and dictation are buttons; fast mode,
+plan mode and thinking level go through the model and permission-mode menus.
+Commands Claude has no equivalent for do nothing there. By default, the allowed
+sessions are the tasks on that layer's keys (*this layer's task in front*). With
+*the task last opened with its key*, only the Claude task last opened by its key
+qualifies, for 15 minutes. Dictation turns Claude's "Press and hold to record"
+button on when the key goes down and off when it comes up. The only keystrokes
+sent to Claude are Escape and arrow keys inside a menu the bridge just opened.
 
 **Codex** (layer 1, and layer 3 when a Codex window is in front). Codex exposes its
 window content to neither UI Automation nor any outside interface, so the bridge
-sends Codex's own default shortcut for the action: Back `Ctrl+[`, Forward `Ctrl+]`,
-sidebar `Ctrl+B`, new task `Ctrl+N`, Approve `Enter` and Reject `Escape`. It sends
-them only while the foreground window is the Codex app and no modifier key is held.
-Approve and Reject are sent only while a pinned Codex task is waiting for approval,
-so `Enter` can't send a half-written prompt. FAST, fork, plan mode and dictation
-have no default Codex shortcut and do nothing on Codex. Task navigation, the
-bottom-right key and the next task needing you work for both apps, because the
-bridge opens those tasks itself.
+sends the command's Codex shortcut: your own from Codex's `keybindings.json`, else
+Codex's default (Back `Ctrl+[`, Forward `Ctrl+]`, sidebar `Ctrl+B`, new task
+`Ctrl+N`, Approve `Enter`, Decline `Escape`, and so on). It sends them only while the
+foreground window is the Codex app and no modifier key is held. Approve and Decline
+are sent only while a Codex task on the keys is waiting for approval, so `Enter`
+can't send a half-written prompt. Text keycaps type their text into Codex.
+
+Many Codex commands (fast mode, plan mode, reasoning effort, fork, push to talk)
+have no default shortcut. With *Let the bridge add Codex shortcuts* on (off by
+default), the bridge adds an unused chord (Ctrl/Alt/Shift with F13 to F24) to
+Codex's `keybindings.json` (in `CODEX_HOME`, else `~/.codex`) for exactly the
+commands your controls use. It records what it added, never changes anyone else's
+entries, and removes its own when you turn the option off. Codex reads the file
+when it starts, so restart Codex if a new shortcut doesn't respond. Task
+navigation, the bottom-right key and the next task needing you work for both apps,
+because the bridge opens those tasks itself.
 
 **Profile.** Setup maps the Claude layer's knob, joystick and action keys to the
 bridge's codes when they are unused (`KC_NONE`). It never takes over lower controls

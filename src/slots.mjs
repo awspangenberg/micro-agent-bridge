@@ -33,5 +33,19 @@ export function allocate(previous, inventories) {
   for(let i=0;i<6;i++)if(!slots[i])slots[i]=incoming.shift()??null;
   return {slots,waiting:recent.slice(6),pinRanks:ranks,pinSerial:serial};
 }
+// "Recent" agent keys: the six most recently active tasks across the given sources, newest
+// first. A task still in the six keeps its key; newcomers fill the freed keys.
+export function allocateRecent(previous, inventories) {
+  const old = previous ?? {slots: Array(6).fill(null), waiting: []};
+  const tasks = new Map();
+  for (const source of inventories) if (source.available) for (const t of source.tasks) if (!t.archived) tasks.set(pinIdentity(t), t);
+  const ordered = [...tasks.values()].sort((a, b) => (b.activity ?? 0) - (a.activity ?? 0));
+  const top = new Map(ordered.slice(0, 6).map(t => [pinIdentity(t), t]));
+  const slots = old.slots.map(t => t && top.has(pinIdentity(t)) ? top.get(pinIdentity(t)) : null);
+  const occupied = new Set(slots.filter(Boolean).map(pinIdentity));
+  const incoming = [...top.values()].filter(t => !occupied.has(pinIdentity(t)));
+  for (let i = 0; i < 6; i++) if (!slots[i]) slots[i] = incoming.shift() ?? null;
+  return {slots, waiting: ordered.slice(6), mode: 'recent'};
+}
 export const colors={empty:[0,0,0],unknown:[0x606060,.2,1],idle:[0xffffff,.45,1],working:[0x0066ff,.55,6],awaiting_input:[0xff9900,.55,4],completed:[0x00ff00,.5,1],error:[0xff0000,.5,1],disconnected:[0xff0000,.5,1]};
 export function frame(states,bank=12){if(![6,12].includes(bank))throw Error('Unowned lighting bank');return states.map((state,i)=>{const [c,b,e]=colors[state]??colors.unknown;return {id:bank+i,c,b,e,s:.3,sk:0,sa:0};});}

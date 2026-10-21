@@ -154,9 +154,12 @@ class WindowsInventoryTests(unittest.TestCase):
         self.catalog(SID_A, [{'type': 'bridge-session', 'bridgeSessionId': 'cse_history'}, {'type': 'continued-in', 'continuedInSessionId': SID_B}])
         self.catalog(SID_B, [{'type': 'ai-title', 'aiTitle': 'Continued task'}, {'type': 'user', 'message': 'PRIVATE PROMPT'}, {'type': 'tool', 'body': 'PRIVATE TOOL'}])
         rows = self.inventory()['claude']
-        self.assertEqual(rows[0]['nativeId'], SID_B)
+        # The history names the task, but no local session or process owns the bridge pin any
+        # more, so Claude hides it: it stays a remote candidate with no local session.
         self.assertEqual(rows[0]['title'], 'Continued task')
         self.assertEqual(rows[0]['state'], 'unknown')
+        self.assertIs(rows[0]['remoteCandidate'], True)
+        self.assertIsNone(rows[0]['nativeId'])
         self.assertNotIn('PRIVATE', json.dumps(rows))
 
     def test_ambiguous_catalog_ids_do_not_select_an_arbitrary_session(self):
@@ -233,7 +236,7 @@ class WindowsInventoryTests(unittest.TestCase):
         completed = subprocess.run([sys.executable, str(SCRIPT), '--home', str(self.home), '--claude-data', str(self.claude), '--json'], capture_output=True, text=True, encoding='utf-8', timeout=10)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         result = json.loads(completed.stdout)
-        self.assertEqual(set(result), {'codex', 'claude', 'errors'})
+        self.assertEqual(set(result), {'codex', 'claude', 'codexRecent', 'claudeRecent', 'errors'})
         self.assertEqual(result['claude'][0]['title'], 'Unicode task \u2713')
         self.assertEqual(completed.stderr, '')
         after = {str(p.relative_to(self.home)): p.read_bytes() for p in self.home.rglob('*') if p.is_file()}

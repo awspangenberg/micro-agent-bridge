@@ -26,14 +26,12 @@
 
 .view-switch { margin: 0 0 12px; align-self: flex-start; }
 .controls-head { display: grid; gap: 12px; margin: 0 0 14px; }
-.follow { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; cursor: pointer; }
-.follow b { display: block; }
-.follow .detail { display: block; color: var(--muted); font-size: 13px; max-width: 52ch; }
-.target { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
-select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+.setting { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; cursor: pointer; }
+.setting b { display: block; }
+.setting .detail { display: block; color: var(--muted); font-size: 13px; max-width: 60ch; }
 .control-group { margin-bottom: 14px; }
 .control-group h2 { font: 600 15px/1.2 var(--display); margin: 8px 0 4px; }
-.control-row { display: grid; grid-template-columns: 150px 1fr auto; gap: 4px 12px; align-items: center; padding: 8px 8px; border-radius: 8px; }
+.control-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 8px 8px; border-radius: 8px; }
 .control-row:hover, .control-row:focus-within { background: var(--well); }
 .control-name { font-weight: 600; font-size: 14px; }
 .control-note { grid-column: 2 / 4; color: var(--muted); font-size: 12.5px; }
@@ -41,3 +39,12 @@ select { font: inherit; color: var(--ink); background: var(--panel); border: 1px
 .dash-foot .btn { font-size: 13px; font-weight: 500; }
 #banner .callout { margin: 0 0 16px; display: flex; align-items: center; gap: 14px; }
 #banner .callout div { flex: 1; }
+.presses { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.presses li { display: grid; grid-template-columns: 76px 150px 1fr auto; gap: 10px; padding: 6px 8px; border-radius: 8px; font-size: 13px; }
+.presses li:nth-child(odd) { background: var(--well); }
+.presses time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.presses .result { color: var(--muted); text-align: right; }
+.presses .ok .result { color: var(--ok, inherit); }
+@media (max-width: 640px) { .presses li { grid-template-columns: 1fr auto; } .presses .what { grid-column: 1 / -1; } }
+.control-row select, .setting select { min-width: 0; max-width: 100%; width: 100%; }
+.setting select { width: 230px; }

@@ -22,18 +22,31 @@ function snapshot() {
 let ticker;
 
 // A preview of the controls report, shaped like `standalone-control.mjs controls`.
-let controlSettings = {version: 1, target: 'foreground', layers: {codex: {followCodex: true, overrides: {}}, claude: {followCodex: true, overrides: {}}, mixed: {followCodex: true, overrides: {}}}};
-const ACTION_SPECS = {
-  none: ['Nothing', true, true], approve: ['Approve', true, true, true], reject: ['Reject', true, true, true], stop: ['Stop the running turn', true, false],
-  newTask: ['New task', true, true], dictate: ['Dictate while held', true, false], back: ['Back', true, true], forward: ['Forward', true, true],
-  sidebar: ['Show or hide the sidebar', true, true], nextAttention: ['Next task needing you', true, true], prevTask: ['Previous pinned task', true, true],
-  nextTask: ['Next pinned task', true, true], openTask: ['Open the selected task', true, true], openApp: ['Open the app', true, true],
-  planMode: ['Toggle plan mode', false, false], fast: ['Cycle speed', false, false], fork: ['Fork the task', false, false],
-};
-const CODEX_SAYS = {bolt: 'fast', check: 'approve', cross: 'reject', branch: 'fork', mic: 'dictate', app: 'openApp', knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask', up: 'planMode', right: 'forward', down: 'sidebar', left: 'back'};
-const BRIDGE_DEFAULTS = {bolt: 'stop', check: 'approve', cross: 'reject', branch: 'newTask', mic: 'dictate', app: 'openApp', knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask', knobHold: 'nextAttention', up: 'prevTask', down: 'nextTask', left: 'back', right: 'forward'};
+const layerConf = () => ({followCodex: true, agentKeys: 'pinned', knobMode: null, overrides: {}});
+let controlSettings = {version: 2, target: 'foreground', codexShortcuts: false, layers: {codex: layerConf(), claude: layerConf(), mixed: layerConf()}};
+// [id, label, runs in Claude, has a Codex shortcut]
+const ACTION_SPECS = [
+  ['none', 'Nothing', false, false], ['ptt', 'Push to talk (hold)', true, false], ['stop', 'Stop the running turn', true, false],
+  ['prevTask', 'Previous task on this layer', true, true], ['nextTask', 'Next task on this layer', true, true], ['openTask', 'Open the selected task', true, true],
+  ['nextAttention', 'Next task needing you', true, true], ['openApp', 'Open the app (Codex, Claude, or the one that last needed you)', true, true],
+  ['scrollUp', 'Scroll the conversation up', true, false], ['scrollDown', 'Scroll the conversation down', true, false],
+  ['cmd:approval.approve', 'Approve', true, true], ['cmd:approval.decline', 'Decline', true, true], ['cmd:newTask', 'New task', true, true],
+  ['cmd:navigateBack', 'Back', true, true], ['cmd:navigateForward', 'Forward', true, true], ['cmd:toggleSidebar', 'Toggle sidebar', true, true],
+  ['cmd:composer.togglePlanMode', 'Toggle plan mode', true, false], ['cmd:composer.toggleFastMode', 'Cycle speed', true, false],
+  ['cmd:composer.increaseReasoningEffort', 'Increase reasoning effort', true, false], ['cmd:composer.decreaseReasoningEffort', 'Decrease reasoning effort', true, false],
+  ['cmd:forkThread', 'Fork chat', false, false], ['cmd:toggleTerminal', 'Toggle terminal', false, true], ['cmd:openSettings', 'Open settings', false, true],
+  ['text::yolo:', 'Write :yolo:', false, true], ['url:https://developers.openai.com', 'Open https://developers.openai.com', true, true],
+];
+const CODEX_SAYS = {bolt: 'cmd:composer.toggleFastMode', check: 'cmd:approval.approve', cross: 'cmd:approval.decline', branch: 'cmd:forkThread', mic: 'ptt', app: 'openApp',
+  knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask', up: 'cmd:composer.togglePlanMode', right: 'cmd:navigateForward', down: 'cmd:toggleSidebar', left: 'cmd:navigateBack'};
+const BRIDGE_DEFAULTS = {bolt: 'stop', check: 'cmd:approval.approve', cross: 'cmd:approval.decline', branch: 'cmd:newTask', mic: 'ptt', app: 'openApp',
+  knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask', knobHold: 'nextAttention', up: 'prevTask', down: 'nextTask', left: 'cmd:navigateBack', right: 'cmd:navigateForward'};
+const KNOB = {'composer-navigation': {knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask'},
+  reasoning: {knobLeft: 'cmd:composer.decreaseReasoningEffort', knobRight: 'cmd:composer.increaseReasoningEffort'}, 'conversation-scroll': {knobLeft: 'scrollUp', knobRight: 'scrollDown'}};
 function previewControls() {
-  const actions = Object.fromEntries(Object.entries(ACTION_SPECS).map(([id, [label, claude, codex, guarded]]) => [id, {label, claude: id !== 'none' && claude, codex: id !== 'none' && codex, guarded: !!guarded}]));
+  const spec = Object.fromEntries(ACTION_SPECS.map(([id, label, claude, codex]) => [id, {label, claude, codex}]));
+  const runs = (id, p) => id !== 'none' && (p === 'claude' ? spec[id].claude : spec[id].codex || (controlSettings.codexShortcuts && id.startsWith('cmd:')));
+  const actions = ACTION_SPECS.map(([id, label]) => ({id, label, claude: runs(id, 'claude'), codex: runs(id, 'codex'), registrable: id.startsWith('cmd:') && !spec[id].codex}));
   const mapping = {};
   for (const [i, layer] of ['codex', 'claude', 'mixed'].entries()) {
     const providers = i === 0 ? ['codex'] : i === 1 ? ['claude'] : ['claude', 'codex'], conf = controlSettings.layers[layer];
@@ -41,12 +54,21 @@ function previewControls() {
     for (const control of Object.keys(BRIDGE_DEFAULTS)) {
       let action = BRIDGE_DEFAULTS[control], source = 'default';
       const says = CODEX_SAYS[control];
-      if (conf.followCodex && says) { if (providers.some(p => actions[says][p])) { action = says; source = 'codex'; } else source = 'default-for-unsupported'; }
+      if (conf.followCodex && says) { if (providers.some(p => runs(says, p))) { action = says; source = 'codex'; } else source = 'default-for-unsupported'; }
+      if (conf.knobMode && KNOB[conf.knobMode][control]) { action = KNOB[conf.knobMode][control]; source = 'knob-mode'; }
       if (conf.overrides[control]) { action = conf.overrides[control]; source = 'override'; }
-      mapping[layer][control] = {action, source, codexAction: says ?? null, runs: Object.fromEntries(providers.map(p => [p, actions[action][p]]))};
+      mapping[layer][control] = {action, source, codexAction: says ?? null, runs: Object.fromEntries(providers.map(p => [p, runs(action, p)]))};
     }
   }
-  return {settings: controlSettings, codexSettingsFound: true, mapping, controls: Object.keys(BRIDGE_DEFAULTS), actions};
+  const now = Date.now();
+  const recent = [{layer: 2, control: 'knobRight', action: 'nextTask', performed: true, reason: null, at: now - 42000},
+    {layer: 2, control: 'check', action: 'cmd:approval.approve', performed: false, reason: 'task-not-bound', at: now - 30000},
+    {layer: 1, control: 'up', action: 'cmd:composer.togglePlanMode', performed: false, reason: 'no-codex-shortcut', at: now - 9000}];
+  const keycaps = [{id: 'FAST', size: 'single', action: 'cmd:composer.toggleFastMode'}, {id: 'APPR', size: 'single', action: 'cmd:approval.approve'},
+    {id: 'TERM', size: 'single', action: 'cmd:toggleTerminal'}, {id: 'YOLO', size: 'single', action: 'text::yolo:'}, {id: 'MIC', size: 'double', action: 'ptt'}];
+  return {settings: controlSettings, codexSettingsFound: true, codexVersion: '26.1016.6573.0', profileUpdate: false, recent, mapping, controls: Object.keys(BRIDGE_DEFAULTS),
+    actions, keycaps, knobModes: Object.keys(KNOB), shortcuts: {enabled: controlSettings.codexShortcuts, file: 'C:\Users\you\.codex\keybindings.json',
+      registered: controlSettings.codexShortcuts ? [{command: 'composer.togglePlanMode', key: 'Ctrl+Alt+Shift+F13'}] : []}};
 }
 
 export async function call(cmd, args, emit) {
