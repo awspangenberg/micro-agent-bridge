@@ -320,3 +320,16 @@ test('a fast knob spin becomes one thinking-level change, and a failing Claude m
   assert.equal(calls.length, 4);
   await runtime.stop();
 });
+
+test("the host paints with the person's colours and repaints when they change", async () => {
+  const {runtime, transport} = fixtures();
+  runtime.settings = () => normalizeSettings({lights: {providers: {codex: '#00ff00'}, keys: {working: {c: '#112233', b: .4}}}});
+  await runtime.start();
+  const frames = () => transport.calls.filter(c => c.method === 'v.oai.thstatus').map(c => c.params);
+  assert.ok(frames().flat().some(k => k.c === 0x112233 && k.b === .4), 'working keys use the chosen colour');
+  const before = frames().length;
+  runtime.settings = () => normalizeSettings({lights: {keys: {working: {c: '#445566'}}}});
+  await runtime.tick();
+  assert.ok(frames().length > before && frames().slice(before).flat().some(k => k.c === 0x445566));
+  await runtime.stop();
+});

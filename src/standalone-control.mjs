@@ -8,6 +8,7 @@ import {StandaloneRuntime, readWindowsInventory} from './standalone-runtime.mjs'
 import {acquireLock} from './lock.mjs';
 import {RemoteClaudeStatus, remoteHosts} from './standalone-remotes.mjs';
 import {clearFrame} from './micro-protocol.mjs';
+import {DEFAULT_LIGHTS, resolveLights} from './standalone-palette.mjs';
 import {CONTROLS, BRIDGE, KNOB_MODES, effectiveMapping, readSettings, readCodexLayout, runs, label} from './standalone-controls.mjs';
 import {loadCatalog} from './codex-catalog.mjs';
 import {readBindings, chordFor, keybindingsPath, ownedEntries} from './codex-keybindings.mjs';
@@ -142,7 +143,7 @@ async function command(options) {
     const keycaps = catalog.keycaps.map(k => ({id: k.id, size: k.size, action: k.id === 'MIC' || k.id === 'MIC1' ? 'ptt' : k.id === 'CODEX' ? 'openApp'
       : k.type === 'command' ? `cmd:${k.command}` : k.type === 'composer-text' ? `text:${k.text}` : k.type === 'external-url' ? 'url:https://developers.openai.com' : 'none'}));
     console.log(JSON.stringify({settings, codexSettingsFound: Boolean(codexLayout), codexVersion: catalog.version, profileUpdate, recent,
-      mapping: effectiveMapping(settings, codexLayout, {catalog, codexKeys}), controls: CONTROLS, actions, keycaps, knobModes: Object.keys(KNOB_MODES),
+      mapping: effectiveMapping(settings, codexLayout, {catalog, codexKeys}), controls: CONTROLS, actions, keycaps, knobModes: Object.keys(KNOB_MODES), lights: {effective: resolveLights(settings.lights), defaults: DEFAULT_LIGHTS},
       shortcuts: {enabled: settings.codexShortcuts, file: keybindingsPath(), registered: ownedEntries(stateDirectory)}}));
     return;
   }

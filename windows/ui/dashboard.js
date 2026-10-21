@@ -1,17 +1,21 @@
 import {call, on, parse, failure} from './bridge.js';
-import {Device, COLORS, lightFor} from './device.js';
+import {Device, COLORS, lightFor, applyLights, RING_COLOURS} from './device.js';
 import {ControlsView} from './controls.js';
+import {LightsView} from './lights.js';
 
 const $ = s => document.querySelector(s);
 const device = new Device($('#device'));
 const controls = new ControlsView($('#controls'), device);
+// The drawing follows the person's colours.
+const lights = new LightsView($('#lights'), overrides => { applyLights(overrides); paintDevice(); });
 let view = 'tasks';
 for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => {
   view = b.dataset.view;
   for (const o of document.querySelectorAll('[data-view]')) { o.setAttribute('aria-pressed', String(o === b)); o.setAttribute('aria-selected', String(o === b)); }
-  $('#board').hidden = view !== 'tasks'; $('#controls').hidden = view !== 'controls';
+  $('#board').hidden = view !== 'tasks'; $('#controls').hidden = view !== 'controls'; $('#lights').hidden = view !== 'lights';
   device.svg.classList.toggle('interactive', view === 'controls');
   if (view === 'controls') { controls.show(shown); void controls.load(); } else device.highlight(null);
+  if (view === 'lights') void lights.load();
 });
 // In the Controls view, clicking a control on the drawing jumps to its setting.
 device.svg.addEventListener('click', e => {
@@ -58,9 +62,10 @@ function paintDevice() {
   const all = (snapshot?.layers ?? []).flatMap(l => l.slots).filter(Boolean);
   const wait = all.find(s => ['approval', 'awaiting_input', 'question'].includes(s.state));
   const busy = [...new Set(all.filter(s => ['working', 'planning', 'testing', 'command', 'editing'].includes(s.state)).map(s => s.provider))];
-  if (wait) device.ring('error', lightFor(wait).color);
-  else if (busy.length) device.ring('search', busy.length > 1 ? COLORS.white : COLORS[busy[0]]);
-  else device.ring('steady', '#5b8cff');
+  const ring = (situation, mode, fallback) => { const c = RING_COLOURS[situation]; c === 'off' ? device.ring('off') : device.ring(mode, c ?? fallback); };
+  if (wait) ring(wait.state === 'question' ? 'question' : 'approval', 'error', lightFor(wait).color);
+  else if (busy.length) ring(busy.length > 1 ? 'both' : 'working', 'search', busy.length > 1 ? COLORS.white : COLORS[busy[0]]);
+  else ring('idle', 'steady', '#5b8cff');
 }
 
 function setStatus(next, message) {
@@ -151,4 +156,4 @@ const initial = await call('hostState');
 snapshot = initial.state?.snapshot ?? null;
 setStatus(initial.status, initial.message);
 // Ask once whether the profile predates lower-control mapping.
-call('controls').then(result => { profileUpdate = Boolean(parse(result)?.profileUpdate); banner(); }).catch(() => {});
+call('controls').then(result => { const data = parse(result); profileUpdate = Boolean(data?.profileUpdate); applyLights(data?.settings?.lights); paintDevice(); banner(); }).catch(() => {});

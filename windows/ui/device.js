@@ -172,8 +172,28 @@ export const STATES = {
   disconnected: {label: 'Disconnected', color: '#f23b3b', motion: 'breathe'},
   inactive: {label: 'Idle', color: null, motion: 'solid', level: .32},
 };
+// The person's colours (controls.json "lights" overrides): only what they changed replaces
+// the drawing's own colours, so untouched states keep their on-screen look.
+const MOTION = {1: 'solid', 4: 'flash', 6: 'breathe'};
+const DEFAULT_STATES = structuredClone(STATES), DEFAULT_COLORS = {...COLORS};
+export const RING_COLOURS = {};
+export function applyLights(o) {
+  Object.assign(COLORS, DEFAULT_COLORS);
+  for (const k of Object.keys(STATES)) STATES[k] = {...DEFAULT_STATES[k]};
+  for (const k of Object.keys(RING_COLOURS)) delete RING_COLOURS[k];
+  if (!o) return;
+  for (const [p, c] of Object.entries(o.providers ?? {})) COLORS[p] = c;
+  for (const [k, v] of Object.entries(o.keys ?? {})) for (const target of k === 'approval' ? ['approval', 'awaiting_input'] : [k]) {
+    const s = STATES[target]; if (!s) continue;
+    if (v.c !== undefined) s.color = v.c;
+    if (v.e === 0) s.off = true; else if (v.e !== undefined) s.motion = MOTION[v.e];
+    if (v.b !== undefined) s.level = Math.max(.15, v.b / .65);
+  }
+  for (const [k, v] of Object.entries(o.ring ?? {})) RING_COLOURS[k] = v.e === 0 ? 'off' : v.c ?? undefined;
+}
 export function lightFor(slot) {
   if (!slot) return null;
   const s = STATES[slot.state] ?? STATES.inactive;
+  if (s.off) return null;
   return {color: s.color ?? COLORS[slot.provider] ?? '#8b959e', level: s.level ?? 1, motion: s.motion, label: s.label};
 }

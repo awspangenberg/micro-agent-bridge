@@ -23,7 +23,7 @@ let ticker;
 
 // A preview of the controls report, shaped like `standalone-control.mjs controls`.
 const layerConf = () => ({followCodex: true, agentKeys: 'pinned', knobMode: null, overrides: {}});
-let controlSettings = {version: 2, target: 'foreground', codexShortcuts: false, layers: {codex: layerConf(), claude: layerConf(), mixed: layerConf()}};
+let controlSettings = {version: 2, target: 'foreground', codexShortcuts: false, lights: {providers: {}, keys: {}, ring: {}}, layers: {codex: layerConf(), claude: layerConf(), mixed: layerConf()}};
 // [id, label, runs in Claude, has a Codex shortcut]
 const ACTION_SPECS = [
   ['none', 'Nothing', false, false], ['ptt', 'Push to talk (hold)', true, false], ['stop', 'Stop the running turn', true, false],
@@ -43,6 +43,14 @@ const BRIDGE_DEFAULTS = {bolt: 'stop', check: 'cmd:approval.approve', cross: 'cm
   knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask', knobHold: 'nextAttention', up: 'prevTask', down: 'nextTask', left: 'cmd:navigateBack', right: 'cmd:navigateForward'};
 const KNOB = {'composer-navigation': {knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask'},
   reasoning: {knobLeft: 'cmd:composer.increaseReasoningEffort', knobRight: 'cmd:composer.decreaseReasoningEffort'}, 'conversation-scroll': {knobLeft: 'scrollUp', knobRight: 'scrollDown'}};
+// The host's default lights (standalone-palette.mjs DEFAULT_LIGHTS) and its merge of overrides.
+const DEFAULT_LIGHTS = {"providers":{"codex":26367,"claude":16750848},"keys":{"approval":{"c":16724736,"b":0.6,"e":4,"s":1},"question":{"c":16711935,"b":0.6,"e":4,"s":1},"planning":{"c":9055202,"b":0.5,"e":6,"s":0.3},"testing":{"c":16764928,"b":0.5,"e":6,"s":0.3},"command":{"c":52479,"b":0.5,"e":6,"s":0.3},"editing":{"c":65450,"b":0.5,"e":6,"s":0.3},"working":{"c":null,"b":0.55,"e":6,"s":0.3},"completed":{"c":65280,"b":0.5,"e":1,"s":0},"error":{"c":16711680,"b":0.5,"e":1,"s":0},"disconnected":{"c":16711680,"b":0.35,"e":6,"s":0.3},"inactive":{"c":null,"b":0.15,"e":1,"s":0}},"ring":{"approval":{"c":16724736,"b":0.6,"e":4,"s":1},"question":{"c":16711935,"b":0.6,"e":4,"s":1},"error":{"c":16711680,"b":0.45,"e":4,"s":0.3},"working":{"c":null,"b":0.45,"e":2,"s":0.3},"both":{"c":16777215,"b":0.45,"e":2,"s":0.3},"idle":{"c":0,"b":0,"e":0,"s":0}}};
+function resolveLights(o) {
+  const int = c => typeof c === 'string' ? parseInt(c.slice(1), 16) : c, out = structuredClone(DEFAULT_LIGHTS);
+  for (const [p, c] of Object.entries(o.providers)) out.providers[p] = int(c);
+  for (const part of ['keys', 'ring']) for (const [k, v] of Object.entries(o[part])) out[part][k] = {...out[part][k], ...v, c: v.c === undefined ? out[part][k].c : int(v.c)};
+  return out;
+}
 function previewControls() {
   const spec = Object.fromEntries(ACTION_SPECS.map(([id, label, claude, codex]) => [id, {label, claude, codex}]));
   const runs = (id, p) => id !== 'none' && (p === 'claude' ? spec[id].claude : spec[id].codex || (controlSettings.codexShortcuts && id.startsWith('cmd:')));
@@ -67,7 +75,7 @@ function previewControls() {
   const keycaps = [{id: 'FAST', size: 'single', action: 'cmd:composer.toggleFastMode'}, {id: 'APPR', size: 'single', action: 'cmd:approval.approve'},
     {id: 'TERM', size: 'single', action: 'cmd:toggleTerminal'}, {id: 'YOLO', size: 'single', action: 'text::yolo:'}, {id: 'MIC', size: 'double', action: 'ptt'}];
   return {settings: controlSettings, codexSettingsFound: true, codexVersion: '26.1016.6573.0', profileUpdate: false, recent, mapping, controls: Object.keys(BRIDGE_DEFAULTS),
-    actions, keycaps, knobModes: Object.keys(KNOB), shortcuts: {enabled: controlSettings.codexShortcuts, file: 'C:\Users\you\.codex\keybindings.json',
+    actions, keycaps, knobModes: Object.keys(KNOB), lights: {effective: resolveLights(controlSettings.lights), defaults: DEFAULT_LIGHTS}, shortcuts: {enabled: controlSettings.codexShortcuts, file: 'C:\Users\you\.codex\keybindings.json',
       registered: controlSettings.codexShortcuts ? [{command: 'composer.togglePlanMode', key: 'Ctrl+Alt+Shift+F13'}] : []}};
 }
 

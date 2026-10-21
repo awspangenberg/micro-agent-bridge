@@ -7,7 +7,7 @@ import path from 'node:path';
 import {allocate, allocateRecent, pinIdentity} from './slots.mjs';
 import {clearFrame} from './micro-protocol.mjs';
 import {CodexActivity} from './standalone-activity.mjs';
-import {slotLight, ambientLight} from './standalone-palette.mjs';
+import {slotLight, ambientLight, resolveLights} from './standalone-palette.mjs';
 import {ControlDecoder, CLAUDE, BRIDGE, LAYERS, effectiveMapping, readSettings, readCodexLayout, runs, providersFor, usedCodexCommands} from './standalone-controls.mjs';
 import {FALLBACK, loadCatalog} from './codex-catalog.mjs';
 import {readBindings, chordFor, sync as syncCodexShortcuts, removeAll as removeCodexShortcuts, ownedEntries} from './codex-keybindings.mjs';
@@ -57,9 +57,9 @@ export function reconcileViews(previous = [], inventory, modes = ['pinned', 'pin
 }
 // Each slot uses the shared palette; working and inactive use the provider colour
 // so Codex (blue) and Claude (amber) stay distinguishable on every layer.
-export const standaloneFrame = (states, layer, providers = []) => {
+export const standaloneFrame = (states, layer, providers = [], lights) => {
   if (![0, 1, 2].includes(layer)) throw Error('Invalid standalone layer');
-  return states.map((state, i) => slotLight(state, providers[i], layer * 6 + i));
+  return states.map((state, i) => slotLight(state, providers[i], layer * 6 + i, lights));
 };
 // Claude: op is invoke | on | off (a hold button) | menu-toggle | effort | plan | scroll.
 export async function runWindowsAction(op, {labels = [], ids = [], arg = ''} = {}) {
@@ -197,13 +197,15 @@ export class StandaloneRuntime extends EventEmitter {
       }
       for (const identity of [...this.attention.keys()]) if (!waiting.has(identity)) this.attention.delete(identity);
       await this.transport.rpc('device.status');
+      // The person's colours, read each tick so a change shows within one poll.
+      const lights = resolveLights(this.settings().lights);
       for (let layer = 0; layer < 3 && !this.stopped; layer++) {
         this.checkAwake();
         const slots = this.views[layer].slots;
-        const colors = standaloneFrame(slots.map(t => this.taskState(t)), layer, slots.map(t => t?.provider)), key = JSON.stringify(colors);
+        const colors = standaloneFrame(slots.map(t => this.taskState(t)), layer, slots.map(t => t?.provider), lights), key = JSON.stringify(colors);
         if (key !== this.lastPaint[layer]) { await this.transport.rpc('v.oai.thstatus', colors); this.lastPaint[layer] = key; }
       }
-      const ring = ambientLight(this.views.flatMap(v => v.slots).map(t => t && {provider: t.provider, state: this.taskState(t)}));
+      const ring = ambientLight(this.views.flatMap(v => v.slots).map(t => t && {provider: t.provider, state: this.taskState(t)}), lights);
       const ringKey = JSON.stringify(ring);
       if (!this.stopped && ringKey !== this.lastRing) { await this.transport.rpc('v.oai.rgbcfg', {ambient: ring}); this.lastRing = ringKey; }
       if (!this.stopped) this.emit('state', this.snapshot());

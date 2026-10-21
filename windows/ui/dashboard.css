@@ -48,3 +48,26 @@
 @media (max-width: 640px) { .presses li { grid-template-columns: 1fr auto; } .presses .what { grid-column: 1 / -1; } }
 .control-row select, .setting select { min-width: 0; max-width: 100%; width: 100%; }
 .setting select { width: 230px; }
+.lights-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.light-row { display: grid; gap: 6px; padding: 8px; border-radius: 8px; }
+.light-row:hover, .light-row:focus-within { background: var(--well); }
+.light-row.app { grid-template-columns: 28px 1fr auto auto; align-items: center; }
+.light-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.light-name { font-weight: 600; font-size: 14px; flex: 1 1 120px; }
+.light-top select { width: 110px; }
+.colour { width: 40px; height: 28px; padding: 0; border: 1px solid var(--line, #3a414a); border-radius: 6px; background: none; cursor: pointer; }
+.colour:disabled { opacity: .35; cursor: default; }
+.app-colour { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.light-sliders { display: grid; grid-template-columns: 1fr; gap: 2px; padding-left: 38px; }
+.slider { display: grid; grid-template-columns: 78px minmax(0, 1fr) 40px; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.slider input { width: 100%; accent-color: var(--ok); }
+.slider output { text-align: right; font-variant-numeric: tabular-nums; }
+.swatch { width: 28px; height: 28px; border-radius: 8px; flex: none; background: var(--c); opacity: var(--level, 1); box-shadow: 0 0 12px var(--c); }
+.swatch.app { background: linear-gradient(135deg, var(--codex, #2f6bff) 0 50%, var(--claude, #ff9a1f) 50% 100%); box-shadow: none; }
+.swatch.off { background: transparent; border: 1px dashed var(--muted); opacity: .6; box-shadow: none; }
+.swatch.pulse { animation: swatch-pulse var(--period, 2s) ease-in-out infinite; }
+.swatch.sweep { background: conic-gradient(from 0deg, var(--c), transparent 70%, var(--c)); animation: swatch-spin var(--period, 2s) linear infinite; }
+@keyframes swatch-pulse { 0%, 100% { opacity: calc(var(--level, 1) * .3); } 50% { opacity: var(--level, 1); } }
+@keyframes swatch-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .swatch.pulse, .swatch.sweep { animation: none; } }
+@media (max-width: 640px) { .light-sliders { grid-template-columns: 1fr; padding-left: 0; } }

@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {normalizeLights} from './standalone-palette.mjs';
 
 export const CONTROLS = ['bolt', 'check', 'cross', 'branch', 'mic', 'app', 'knobLeft', 'knobRight', 'knobPress', 'knobHold', 'up', 'right', 'down', 'left'];
 export const LAYERS = ['codex', 'claude', 'mixed'];
@@ -209,7 +210,7 @@ export function readCodexLayout(home = os.homedir()) {
 // ---- The person's settings (controls.json) -----------------------------------------------
 // agentKeys: what the six task keys show on that layer, as in Codex's own agent-key setting.
 export const AGENT_KEY_MODES = ['pinned', 'recent'];
-export const DEFAULT_SETTINGS = Object.freeze({version: 1, target: 'foreground', codexShortcuts: false,
+export const DEFAULT_SETTINGS = Object.freeze({version: 1, target: 'foreground', codexShortcuts: false, lights: normalizeLights(null),
   layers: Object.fromEntries(LAYERS.map(l => [l, {followCodex: true, agentKeys: 'pinned', knobMode: null, overrides: {}}]))});
 
 export function normalizeSettings(value) {
@@ -217,6 +218,7 @@ export function normalizeSettings(value) {
   if (!value || typeof value !== 'object') return out;
   if (value.target === 'opened' || value.target === 'foreground') out.target = value.target;
   out.codexShortcuts = value.codexShortcuts === true;
+  out.lights = normalizeLights(value.lights);
   for (const layer of LAYERS) {
     const v = value.layers?.[layer];
     if (!v || typeof v !== 'object') continue;

@@ -182,6 +182,14 @@ approval or question colour if anything needs you, red for an error, a slow swee
 in the provider colour (white if both) while anything works, otherwise off. Key
 backlighting stays off. The terminal prints slot titles and state changes.
 
+These are the defaults. The dashboard's **Lights** view changes any of them: the
+Codex and Claude colours, and for each task-key state and each ring situation
+(needs approval, a question, an error, one app working, both working, nothing
+happening) a colour, brightness, animation (solid, breathe, pulse, sweep for the
+ring, or off) and speed. Only what you change is stored, under `lights` in
+`controls.json`; values outside the device's limits are ignored, and *Reset*
+returns to the default. The running host repaints within a couple of seconds.
+
 Claude detail beyond working needs the owned hooks. They merge only their own
 entries into `~/.claude/settings.json` (backed up in the state directory) and
 record only state for allowlisted, assigned local sessions whose live process
