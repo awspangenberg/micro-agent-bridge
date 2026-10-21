@@ -15,7 +15,8 @@ const REASONS = {
   'foreground-not-claude': 'Claude was not in front', 'foreground-not-codex': 'Codex was not in front', 'task-not-bound': "the window in front isn't one of this layer's tasks",
   'no-claude-task-on-layer': 'no Claude task on this layer', 'no-codex-approval-waiting': 'no Codex approval was waiting', 'no-codex-shortcut': 'Codex has no shortcut for it',
   'claude-unavailable': "Claude's tasks couldn't be read", unsupported: "the app in front can't do this", 'layer-unknown': "the layer couldn't be read", unassigned: 'nothing assigned',
-  'modifier-held': 'a modifier key was held', 'effort-at-limit': 'already at the limit', 'codex-waiting-for-you': 'a Codex task is waiting for you (Escape would decline it)', 'no-codex-task-working': 'no Codex task was working', 'no-task': 'no task on that key',
+  'modifier-held': 'a modifier key was held', 'effort-at-limit': 'already at the limit', 'codex-waiting-for-you': 'a Codex task is waiting for you (Escape would decline it)', 'no-codex-task-working': 'no Codex task was working', 'claude-menu-paused': "Claude's menu didn't respond, so menus are paused for 30 seconds",
+  'menu-opener-0': "Claude's model menu wasn't found", 'effort-menu-not-found': "Claude's Effort menu wasn't found", 'effort-levels-not-found': "Claude's Effort levels weren't found", 'no-task': 'no task on that key',
 };
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 const option = (value, text, selected) => { const o = el('option', '', text); o.value = value; o.selected = selected; return o; };

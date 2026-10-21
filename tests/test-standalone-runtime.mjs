@@ -291,3 +291,32 @@ test('CLI requires explicit profile consent and validates options before device 
   assert.throws(() => parseArguments(['start', '--state']), /Missing/);
   assert.throws(() => parseArguments(['start', '--unsafe']), /Unknown/);
 });
+test('a fast knob spin becomes one thinking-level change, and a failing Claude menu pauses menus', async () => {
+  const calls = [], results = [];
+  let release, outcome = {performed: true};
+  const {runtime, transport} = fixtures({
+    runAction: async (op, request) => { calls.push({op, ...request}); if (calls.length === 1) await new Promise(r => { release = r; }); return outcome; }});
+  transport.rpc = async (method, params) => { transport.calls.push({method, params}); return method === 'device.status' ? {layer_index: 1} : {}; };
+  runtime.settings = () => normalizeSettings({layers: {claude: {knobMode: 'reasoning'}}});
+  runtime.on('action', a => results.push(a));
+  await runtime.start();
+  // The first detent opens the menu; the next five arrive while it is open and become one change.
+  transport.emit('input', {key: 'ACT01', act: 2});
+  while (!release) await new Promise(r => setImmediate(r));
+  for (let i = 0; i < 5; i++) transport.emit('input', {key: 'ACT01', act: 2});
+  transport.emit('input', {key: 'ACT00', act: 2});
+  release(); await runtime.queue; await runtime.queue;
+  assert.deepEqual(calls.map(c => [c.op, c.arg]), [['effort', 1], ['effort', 4]]);
+  assert.equal(results.at(-1).steps, 4);
+  // A menu that can't be found pauses menu actions instead of reopening on every detent.
+  outcome = {performed: false, reason: 'effort-levels-not-found'};
+  await press(runtime, {key: 'ACT01', act: 2});
+  await press(runtime, {key: 'ACT01', act: 2});
+  assert.equal(calls.length, 3);
+  assert.equal(results.at(-1).reason, 'claude-menu-paused');
+  runtime.now = () => Date.now() + 31000; outcome = {performed: true};
+  runtime.lastInventory = runtime.now();
+  await press(runtime, {key: 'ACT01', act: 2});
+  assert.equal(calls.length, 4);
+  await runtime.stop();
+});

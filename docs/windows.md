@@ -267,7 +267,10 @@ Commands Claude has no equivalent for do nothing there. By default, the allowed
 sessions are the tasks on that layer's keys (*this layer's task in front*). With
 *the task last opened with its key*, only the Claude task last opened by its key
 qualifies, for 15 minutes. Dictation turns Claude's "Press and hold to record"
-button on when the key goes down and off when it comes up. The only keystrokes
+button on when the key goes down and off when it comes up. Opening a menu takes
+a moment, so knob detents that arrive meanwhile are merged into one change (a
+fast spin moves the thinking level several steps in one menu visit), and when a
+menu can't be found or used the bridge stops opening menus for 30 seconds. The only keystrokes
 sent to Claude are Escape and arrow keys inside a menu the bridge just opened.
 
 **Codex** (layer 1, and layer 3 when a Codex window is in front). Codex exposes its

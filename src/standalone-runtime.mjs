@@ -242,10 +242,22 @@ export class StandaloneRuntime extends EventEmitter {
   noteActivity(provider) { if (provider) this.lastActivity = {provider, at: this.now()}; }
   onControl(decoded) {
     if (!decoded || this.stopped) return;
+    // Knob detents arrive faster than an action can finish. Detents waiting behind a running
+    // action merge into one net turn, so a fast spin never queues a long run of actions.
+    if (decoded.phase === 'tick') {
+      const step = decoded.control === 'knobRight' ? 1 : -1;
+      if (this.turn && this.turn.layer === decoded.layer) { this.turn.delta += step; return; }
+      const turn = this.turn = {delta: step, layer: decoded.layer};
+      this.queue = this.queue.then(() => {
+        if (this.turn === turn) this.turn = null;
+        return turn.delta && this.control({control: turn.delta > 0 ? 'knobRight' : 'knobLeft', phase: 'tick', layer: turn.layer}, Math.abs(turn.delta));
+      }).catch(error => this.emit('notice', error.message));
+      return;
+    }
     // One control at a time, in order; a release always follows its press.
     this.queue = this.queue.then(() => this.control(decoded)).catch(error => this.emit('notice', error.message));
   }
-  async control(decoded) {
+  async control(decoded, steps = 1) {
     if (this.stopped) return;
     if (decoded.phase === 'release') {
       const held = this.holding;
@@ -264,12 +276,15 @@ export class StandaloneRuntime extends EventEmitter {
     if (!entry || entry.action === 'none') { this.record({layer: layer + 1, control: decoded.control, action: 'none', performed: false, reason: 'unassigned'}); return; }
     // Push to talk holds for as long as the key is down.
     const hold = entry.action === 'ptt' && decoded.control === 'mic';
-    const result = await this.perform(entry.action, layer, decoded.control, hold ? 'on' : 'invoke');
+    // A thinking-level change moves several levels in one go; other actions repeat per detent.
+    const once = /ReasoningEffort$/.test(entry.action);
+    let result;
+    for (let i = 0; i < (once ? 1 : steps); i++) result = await this.perform(entry.action, layer, decoded.control, hold ? 'on' : 'invoke', once ? steps : 1);
     if (hold && result.performed) this.holding = {control: decoded.control, action: entry.action, layer, provider: result.provider};
   }
   codexKeys = command => Boolean(chordFor(command, this.catalog, this.bindings()));
   mapping() { return effectiveMapping(this.settings(), this.codexLayout(), {catalog: this.catalog, codexKeys: this.codexKeys}); }
-  async perform(action, layer, control, mode) {
+  async perform(action, layer, control, mode, steps = 1) {
     let result;
     try {
       if (BRIDGE[action] !== undefined && !action.startsWith('scroll')) result = await this.bridgeAction(action, layer);
@@ -280,13 +295,13 @@ export class StandaloneRuntime extends EventEmitter {
         for (const provider of providersFor(layer)) {
           if (mode === 'off' && this.holding && provider !== (this.holding.provider ?? provider)) continue;
           if (!runs(action, provider, {codexKeys: this.codexKeys})) continue;
-          result = provider === 'claude' ? await this.claudeAction(action, layer, mode) : await this.codexAction(action, mode);
+          result = provider === 'claude' ? await this.claudeAction(action, layer, mode, steps) : await this.codexAction(action, mode, steps);
           if (result.performed) { this.noteActivity(provider); result.provider = provider; break; }
           if (!/^foreground-not-/.test(result.reason ?? '')) break;
         }
       }
     } catch (error) { result = {performed: false, reason: 'error', message: error.message}; }
-    if (mode !== 'off') this.record({layer: layer + 1, control, action, performed: result.performed === true, reason: result.reason ?? null});
+    if (mode !== 'off') this.record({layer: layer + 1, control, action, performed: result.performed === true, reason: result.reason ?? null, ...(steps > 1 ? {steps} : {})});
     return result;
   }
   // With the person's opt-in, keep Codex shortcuts registered for exactly the Codex commands the
@@ -312,7 +327,7 @@ export class StandaloneRuntime extends EventEmitter {
     this.emit('action', entry);
   }
   // Claude: the named button in the front Claude window, only when that window shows an allowed task.
-  async claudeAction(action, layer, mode) {
+  async claudeAction(action, layer, mode, steps = 1) {
     const spec = CLAUDE[action.startsWith('cmd:') ? action.slice(4) : action] ?? (action.startsWith('scroll') ? {scroll: action === 'scrollUp' ? -1 : 1} : null);
     if (!spec) return {performed: false, reason: 'unsupported'};
     if (this.errors.claude || this.now() - this.lastInventory > 10000) return {performed: false, reason: 'claude-unavailable'};
@@ -326,16 +341,21 @@ export class StandaloneRuntime extends EventEmitter {
     if (!ids.length) return {performed: false, reason: 'no-claude-task-on-layer'};
     if (spec.scroll) return this.runAction('scroll', {ids, arg: spec.scroll});
     if (spec.labels) return this.runAction(spec.hold ? mode : 'invoke', {labels: spec.labels, ids});
+    // Menus take a moment to open. When one can't be found or used, stop opening menus for a
+    // while rather than open and close them on every press.
+    if (this.now() < (this.menuPausedUntil ?? 0)) return {performed: false, reason: 'claude-menu-paused'};
     const menu = spec.menu;
-    if (menu.toggle) return this.runAction('menu-toggle', {labels: [menu.opener], ids, arg: menu.toggle});
-    if (menu.step) return this.runAction('effort', {labels: [menu.opener, menu.submenu], ids, arg: menu.step});
-    // Plan mode toggles between Plan and the mode chosen before it.
-    return this.runAction('plan', {labels: menu.opener, ids, arg: menu.plan});
+    const result = menu.toggle ? await this.runAction('menu-toggle', {labels: [menu.opener], ids, arg: menu.toggle})
+      : menu.step ? await this.runAction('effort', {labels: [menu.opener, menu.submenu], ids, arg: menu.step * steps})
+      // Plan mode toggles between Plan and the mode chosen before it.
+      : await this.runAction('plan', {labels: menu.opener, ids, arg: menu.plan});
+    if (/^(menu-|effort-menu|effort-levels|mode-menu|previous-mode|error)/.test(result?.reason ?? '')) this.menuPausedUntil = this.now() + 30000;
+    return result;
   }
   // Codex: its own shortcut (default, the person's, or one the bridge registered), only to a
   // Codex window in front. Approve and Reject only while a pinned Codex task is waiting for
   // approval, so Enter can't send a half-written prompt.
-  async codexAction(action, mode) {
+  async codexAction(action, mode, steps = 1) {
     if (action.startsWith('text:')) return this.sendShortcut(null, 'tap', action.slice(5));
     if (action === 'stop') {
       // Escape interrupts a running Codex turn, but it also declines a waiting approval, so it is
@@ -350,7 +370,10 @@ export class StandaloneRuntime extends EventEmitter {
       return {performed: false, reason: 'no-codex-approval-waiting'};
     const chord = chordFor(command, this.catalog, this.bindings());
     if (!chord) return {performed: false, reason: 'no-codex-shortcut'};
-    return this.sendShortcut(chord, mode === 'on' ? 'down' : mode === 'off' ? 'up' : 'tap');
+    if (mode !== 'invoke') return this.sendShortcut(chord, mode === 'on' ? 'down' : 'up');
+    let result;
+    for (let i = 0; i < steps; i++) if (!(result = await this.sendShortcut(chord, 'tap')).performed) break;
+    return result;
   }
   layerTasks(layer) { return (this.views[layer]?.slots ?? []).map((t, i) => t && {task: t, slot: i}).filter(Boolean); }
   async openSlot(layer, slot) {
