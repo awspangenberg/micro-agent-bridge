@@ -1,11 +1,13 @@
 # Task-bound Claude desktop actions through UI Automation. Acts only when the foreground window
 # is the installed Claude app and its document URL names one of the allowed sessions, and only on
 # controls found by their accessible names. No keystrokes are sent, except Escape to close a menu
-# this script opened and arrow keys inside such a menu. Prints one JSON line.
+# this script opened, and only while it is open (in Claude, Escape twice outside a menu opens
+# Rewind). A submenu that opens only on hover gets the pointer moved over it and put back.
+# Prints one JSON line.
 #   -Op invoke      invoke the one visible, enabled button named in -Names
 #   -Op on|off      toggle that button on/off (hold-to-use buttons such as dictation)
 #   -Op menu-toggle open the menu whose button name starts with -Names, toggle the item -Arg
-#   -Op effort      open -Names[0] (model menu), its -Names[1] submenu, move the level by -Arg (+1/-1)
+#   -Op effort      open -Names[0] (model menu), its -Names[1] submenu, move the level by -Arg steps
 #   -Op plan        open the permission-mode menu (button named one of -Names); choose -Arg, or
 #                   when -Arg is already chosen, the mode chosen before it
 #   -Op scroll      scroll the conversation by a page, -Arg -1 (up) or 1 (down)
@@ -19,6 +21,9 @@ try {
 [DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, out uint pid);
 [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, System.UIntPtr extra);
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+public struct POINT { public int X; public int Y; }
 '@
   $A = [Windows.Automation.AutomationElement]; $CT = [Windows.Automation.ControlType]
   $labels = $Names -split '\|' | Where-Object { $_ -and $_ -ne '-' }
@@ -59,8 +64,17 @@ try {
     Start-Sleep -Milliseconds 350
     return $b[0]
   }
-  function Close { Key 0x1B; Start-Sleep -Milliseconds 120 }
-  function Select($e) {
+  # Escape only while one of Claude's menus is open, never more times than menus are open.
+  function Close { for ($i = 0; $i -lt 3 -and @(InMenus $CT::Menu).Count; $i++) { Key 0x1B; Start-Sleep -Milliseconds 150 } }
+  # Claude's submenus open on hover: move the pointer over the item, then put it back.
+  function Hover($e) {
+    $r = $e.Current.BoundingRectangle; $old = New-Object Mab.Win+POINT; [void][Mab.Win]::GetCursorPos([ref]$old)
+    $x = [int]($r.X + $r.Width / 2); $y = [int]($r.Y + $r.Height / 2)
+    [void][Mab.Win]::SetCursorPos($x, $y); Start-Sleep -Milliseconds 80; [void][Mab.Win]::SetCursorPos($x + 4, $y); Start-Sleep -Milliseconds 400
+    return $old
+  }
+  function Choose($e) { $ip = Pattern $e ([Windows.Automation.InvokePattern]::Pattern); if ($ip) { $ip.Invoke() } else { [void](SelectItem $e) } }
+  function SelectItem($e) {
     $si = Pattern $e ([Windows.Automation.SelectionItemPattern]::Pattern)
     if ($si) { $si.Select() } else { $ip = Pattern $e ([Windows.Automation.InvokePattern]::Pattern); if ($ip) { $ip.Invoke() } else { return $false } }
     return $true
@@ -77,25 +91,32 @@ try {
     }
     'menu-toggle' {
       [void](Open $labels)
-      $item = @(InMenus $CT::CheckBox | Where-Object { $_.Current.Name -eq $Arg })
+      # A checkbox, or a menu item whose name starts with the label (Claude adds notes after it).
+      $item = @(@(InMenus $CT::CheckBox) + @(InMenus $CT::MenuItem) | Where-Object { $_.Current.Name -eq $Arg -or $_.Current.Name.StartsWith("$Arg ") })
       if ($item.Count -ne 1) { Close; Done @{performed = $false; reason = "menu-item-$($item.Count)"} }
-      (Pattern $item[0] ([Windows.Automation.TogglePattern]::Pattern)).Toggle()
-      Close; Done @{performed = $true; control = $Arg}
+      $tp = Pattern $item[0] ([Windows.Automation.TogglePattern]::Pattern)
+      if ($tp) { $tp.Toggle() } else { Choose $item[0] }
+      Start-Sleep -Milliseconds 150; Close; Done @{performed = $true; control = $Arg}
     }
     'effort' {
       [void](Open @($labels[0]))
       $sub = @(InMenus $CT::MenuItem | Where-Object { $_.Current.Name -like "$($labels[1])*" })
       if ($sub.Count -ne 1) { Close; Done @{performed = $false; reason = 'effort-menu-not-found'} }
-      # The submenu opens from the keyboard: focus its item and press Right.
-      $sub[0].SetFocus(); Start-Sleep -Milliseconds 150; Key 0x27; Start-Sleep -Milliseconds 350
-      $levels = @(InMenus $CT::RadioButton | Where-Object { (Pattern $_ ([Windows.Automation.SelectionItemPattern]::Pattern)) -and $_.Current.Name -notmatch '^(Opus|Fable|Sonnet|Haiku|Claude|Code)\b' })
-      $current = [array]::FindIndex([object[]]$levels, [Predicate[object]]{ param($e) (Pattern $e ([Windows.Automation.SelectionItemPattern]::Pattern)).Current.IsSelected })
-      if ($levels.Count -lt 2 -or $current -lt 0) { Close; Close; Done @{performed = $false; reason = 'effort-levels-not-found'} }
-      $next = [Math]::Max(0, [Math]::Min($levels.Count - 1, $current + [int]$Arg))
-      if ($next -eq $current) { Close; Close; Done @{performed = $false; reason = 'effort-at-limit'} }
-      [void](Select $levels[$next]); Start-Sleep -Milliseconds 150
-      if (@(InMenus $CT::Menu).Count) { Close }
-      Done @{performed = $true; effort = $levels[$next].Current.Name}
+      $old = Hover $sub[0]
+      try {
+        # The levels are the radio items of the submenu; Ultracode is a mode, not a level.
+        $menus = @(InMenus $CT::Menu | Where-Object { $_.Current.Name -like "$($labels[1])*" })
+        $levels = @($menus | ForEach-Object { $_.FindAll('Descendants', (New-Object Windows.Automation.PropertyCondition($A::ControlTypeProperty, $CT::RadioButton))) } |
+          Where-Object { -not $_.Current.IsOffscreen -and $_.Current.Name -notmatch '^Ultracode' })
+        $current = [array]::FindIndex([object[]]$levels, [Predicate[object]]{ param($e) $sp = Pattern $e ([Windows.Automation.SelectionItemPattern]::Pattern); $null -ne $sp -and $sp.Current.IsSelected })
+        if ($levels.Count -lt 2 -or $current -lt 0) { Close; Done @{performed = $false; reason = 'effort-levels-not-found'} }
+        $next = [Math]::Max(0, [Math]::Min($levels.Count - 1, $current + [int]$Arg))
+        if ($next -eq $current) { Close; Done @{performed = $false; reason = 'effort-at-limit'} }
+        $name = $levels[$next].Current.Name.Split(' ')[0]
+        Choose $levels[$next]; Start-Sleep -Milliseconds 200
+        Close
+        Done @{performed = $true; effort = $name}
+      } finally { [void][Mab.Win]::SetCursorPos($old.X, $old.Y) }
     }
     'plan' {
       [void](Open $labels)
@@ -108,10 +129,10 @@ try {
         $previous = if (Test-Path $state) { Get-Content $state -Raw } else { 'Manual' }
         $target = @($modes | Where-Object { $_.Current.Name -eq $previous.Trim() -or $_.Current.Name.StartsWith("$($previous.Trim()) ") })
         if ($target.Count -ne 1) { Close; Done @{performed = $false; reason = 'previous-mode-not-found'} }
-        [void](Select $target[0])
+        [void](SelectItem $target[0])
       } else {
         $selected[0].Current.Name.Split(' ')[0] | Set-Content $state -NoNewline
-        [void](Select $plan[0])
+        [void](SelectItem $plan[0])
       }
       Start-Sleep -Milliseconds 150
       if (@(InMenus $CT::Menu).Count) { Close }
@@ -133,4 +154,4 @@ try {
       Done @{performed = $true; control = $found[0].Current.Name}
     }
   }
-} catch { Done @{performed = $false; reason = 'error'; detail = $_.Exception.Message} }
+} catch { Done @{performed = $false; reason = 'error'; detail = $_.Exception.Message; line = $_.InvocationInfo.ScriptLineNumber} }
