@@ -100,7 +100,8 @@ export const DEFAULTS = {
 // Knob presets, matching Codex's encoder modes.
 export const KNOB_MODES = {
   'composer-navigation': {knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask'},
-  reasoning: {knobLeft: 'cmd:composer.decreaseReasoningEffort', knobRight: 'cmd:composer.increaseReasoningEffort'},
+  // Turning left raises the thinking level (tested on the Micro).
+  reasoning: {knobLeft: 'cmd:composer.increaseReasoningEffort', knobRight: 'cmd:composer.decreaseReasoningEffort'},
   'conversation-scroll': {knobLeft: 'scrollUp', knobRight: 'scrollDown'},
 };
 // Earlier action names, from controls.json written by rc.6.

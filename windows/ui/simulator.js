@@ -42,7 +42,7 @@ const CODEX_SAYS = {bolt: 'cmd:composer.toggleFastMode', check: 'cmd:approval.ap
 const BRIDGE_DEFAULTS = {bolt: 'stop', check: 'cmd:approval.approve', cross: 'cmd:approval.decline', branch: 'cmd:newTask', mic: 'ptt', app: 'openApp',
   knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask', knobHold: 'nextAttention', up: 'prevTask', down: 'nextTask', left: 'cmd:navigateBack', right: 'cmd:navigateForward'};
 const KNOB = {'composer-navigation': {knobLeft: 'prevTask', knobRight: 'nextTask', knobPress: 'openTask'},
-  reasoning: {knobLeft: 'cmd:composer.decreaseReasoningEffort', knobRight: 'cmd:composer.increaseReasoningEffort'}, 'conversation-scroll': {knobLeft: 'scrollUp', knobRight: 'scrollDown'}};
+  reasoning: {knobLeft: 'cmd:composer.increaseReasoningEffort', knobRight: 'cmd:composer.decreaseReasoningEffort'}, 'conversation-scroll': {knobLeft: 'scrollUp', knobRight: 'scrollDown'}};
 function previewControls() {
   const spec = Object.fromEntries(ACTION_SPECS.map(([id, label, claude, codex]) => [id, {label, claude, codex}]));
   const runs = (id, p) => id !== 'none' && (p === 'claude' ? spec[id].claude : spec[id].codex || (controlSettings.codexShortcuts && id.startsWith('cmd:')));

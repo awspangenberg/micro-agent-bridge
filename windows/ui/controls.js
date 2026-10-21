@@ -10,7 +10,7 @@ const GROUPS = [
   ['Joystick', [['up', 'Push up'], ['right', 'Push right'], ['down', 'Push down'], ['left', 'Push left']]],
 ];
 const NAMES = Object.fromEntries(GROUPS.flatMap(([, rows]) => rows));
-const KNOB_LABELS = {'composer-navigation': 'Move between tasks', reasoning: 'Thinking level (right raises it)', 'conversation-scroll': 'Scroll the conversation'};
+const KNOB_LABELS = {'composer-navigation': 'Move between tasks', reasoning: 'Thinking level (left raises it)', 'conversation-scroll': 'Scroll the conversation'};
 const REASONS = {
   'foreground-not-claude': 'Claude was not in front', 'foreground-not-codex': 'Codex was not in front', 'task-not-bound': "the window in front isn't one of this layer's tasks",
   'no-claude-task-on-layer': 'no Claude task on this layer', 'no-codex-approval-waiting': 'no Codex approval was waiting', 'no-codex-shortcut': 'Codex has no shortcut for it',

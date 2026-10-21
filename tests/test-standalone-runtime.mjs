@@ -63,7 +63,7 @@ test('Claude-layer controls use named controls only for the layer\'s Claude task
   // Menu-based equivalents: thinking level and plan mode.
   runtime.settings = () => normalizeSettings({layers: {claude: {knobMode: 'reasoning', overrides: {up: 'cmd:composer.togglePlanMode'}}}});
   await press(runtime, {key: 'ACT01', act: 1});
-  assert.deepEqual([calls.at(-1).op, calls.at(-1).arg, calls.at(-1).labels], ['effort', 1, ['Model:', 'Effort']]);
+  assert.deepEqual([calls.at(-1).op, calls.at(-1).arg, calls.at(-1).labels], ['effort', -1, ['Model:', 'Effort']]);
   await press(runtime, {key: 'ACT03', act: 1});
   assert.deepEqual([calls.at(-1).op, calls.at(-1).arg], ['plan', 'Plan']);
   runtime.settings = () => normalizeSettings(null);
@@ -156,7 +156,7 @@ commandId = "composer.togglePlanMode"
   assert.deepEqual([map.codex.check.action, map.codex.check.source], ['cmd:approval.approve', 'codex']);
   // Fast mode, plan mode and thinking level run in Claude through its menus.
   assert.deepEqual([map.claude.bolt.action, map.claude.up.action, map.claude.knobRight.action, map.claude.mic.action, map.claude.app.action],
-    ['cmd:composer.toggleFastMode', 'cmd:composer.togglePlanMode', 'cmd:composer.increaseReasoningEffort', 'ptt', 'openApp']);
+    ['cmd:composer.toggleFastMode', 'cmd:composer.togglePlanMode', 'cmd:composer.decreaseReasoningEffort', 'ptt', 'openApp']);
   // Codex has no shortcut for FAST here, and Claude has no terminal: bridge defaults apply.
   assert.deepEqual([map.codex.bolt.action, map.codex.bolt.source, map.codex.bolt.runs.codex], ['stop', 'default-for-unsupported', true]);
   assert.deepEqual([map.claude.branch.action, map.claude.branch.source], ['cmd:newTask', 'default-for-unsupported']);
@@ -306,7 +306,7 @@ test('a fast knob spin becomes one thinking-level change, and a failing Claude m
   for (let i = 0; i < 5; i++) transport.emit('input', {key: 'ACT01', act: 2});
   transport.emit('input', {key: 'ACT00', act: 2});
   release(); await runtime.queue; await runtime.queue;
-  assert.deepEqual(calls.map(c => [c.op, c.arg]), [['effort', 1], ['effort', 4]]);
+  assert.deepEqual(calls.map(c => [c.op, c.arg]), [['effort', -1], ['effort', -4]]);
   assert.equal(results.at(-1).steps, 4);
   // A menu that can't be found pauses menu actions instead of reopening on every detent.
   outcome = {performed: false, reason: 'effort-levels-not-found'};

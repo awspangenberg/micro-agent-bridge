@@ -251,8 +251,8 @@ on that layer, the bridge default applies instead:
 The Controls view offers every option Codex has: the bridge's own actions, Codex's
 keycap presets, text keycaps such as `:yolo:`, and every Codex command (read from
 the installed Codex app, so the list matches its version). Its *Knob* setting sets
-the knob for a layer, including *Thinking level* (turn right to raise reasoning
-effort, left to lower it). Choosing an action for a control overrides it for that
+the knob for a layer, including *Thinking level* (turn left to raise reasoning
+effort, right to lower it). Choosing an action for a control overrides it for that
 layer; *Reset* returns to the followed or default action. *Recent presses* lists
 the last presses and why any did nothing (also kept in `controls-log.json` in the
 state directory).
