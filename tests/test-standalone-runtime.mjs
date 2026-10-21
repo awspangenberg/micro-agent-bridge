@@ -74,6 +74,15 @@ test('Claude-layer controls use named controls only for the layer\'s Claude task
   await press(runtime, {event: 'stick', a: 0.01, d: 1});
   await press(runtime, {event: 'stick', a: 0, d: 0});
   assert.deepEqual(shortcuts, [['Ctrl+[', 'tap']], 'joystick left is Back');
+  // Stop sends Escape to Codex only while a Codex task works and none waits for approval.
+  const detail = runtime.codex.detail;
+  runtime.codex.detail = () => 'idle'; await press(runtime, {key: 'ACT06', act: 1});
+  assert.equal(results.at(-1).reason, 'no-codex-task-working');
+  runtime.codex.detail = () => 'approval'; await press(runtime, {key: 'ACT06', act: 1});
+  assert.equal(results.at(-1).reason, 'codex-waiting-for-you');
+  runtime.codex.detail = () => 'working'; await press(runtime, {key: 'ACT06', act: 1});
+  assert.deepEqual(shortcuts.at(-1), ['Escape', 'tap']);
+  runtime.codex.detail = detail; shortcuts.length = 1;
   // Push to talk has no Codex shortcut until one is registered.
   await press(runtime, {key: 'ACT10', act: 1}); await press(runtime, {key: 'ACT10', act: 0});
   assert.equal(results.find(r => r.control === 'mic' && r.layer === 1).reason, 'unsupported');
@@ -149,7 +158,7 @@ commandId = "composer.togglePlanMode"
   assert.deepEqual([map.claude.bolt.action, map.claude.up.action, map.claude.knobRight.action, map.claude.mic.action, map.claude.app.action],
     ['cmd:composer.toggleFastMode', 'cmd:composer.togglePlanMode', 'cmd:composer.increaseReasoningEffort', 'ptt', 'openApp']);
   // Codex has no shortcut for FAST here, and Claude has no terminal: bridge defaults apply.
-  assert.deepEqual([map.codex.bolt.action, map.codex.bolt.source], ['stop', 'default-for-unsupported']);
+  assert.deepEqual([map.codex.bolt.action, map.codex.bolt.source, map.codex.bolt.runs.codex], ['stop', 'default-for-unsupported', true]);
   assert.deepEqual([map.claude.branch.action, map.claude.branch.source], ['cmd:newTask', 'default-for-unsupported']);
   // Knob preset and overrides (legacy names are migrated).
   assert.deepEqual([map.mixed.knobLeft.action, map.mixed.knobLeft.source], ['scrollUp', 'knob-mode']);

@@ -97,6 +97,9 @@ export async function openWindowsApp(provider) {
 }
 const writeJson = (file, value) => { const temp = file + '.' + process.pid + '.tmp'; fs.writeFileSync(temp, JSON.stringify(value), {mode: 0o600}); fs.renameSync(temp, file); };
 
+// Codex task states that mean a turn is running.
+const CODEX_BUSY = ['working', 'planning', 'reasoning', 'testing', 'command', 'editing'];
+
 export class StandaloneRuntime extends EventEmitter {
   constructor({transport, inventory, topology, openTask = openWindowsTask, runAction = runWindowsAction, sendShortcut = sendCodexShortcut, openApp = openWindowsApp,
     openUrl = openWindowsUrl, settings, codexLayout, catalog, bindings, stateDirectory, codex = new CodexActivity(), remote = null, pollMs = 2000, now = Date.now}) {
@@ -334,6 +337,14 @@ export class StandaloneRuntime extends EventEmitter {
   // approval, so Enter can't send a half-written prompt.
   async codexAction(action, mode) {
     if (action.startsWith('text:')) return this.sendShortcut(null, 'tap', action.slice(5));
+    if (action === 'stop') {
+      // Escape interrupts a running Codex turn, but it also declines a waiting approval, so it is
+      // sent only while a Codex task on the keys is working and none is waiting for you.
+      const states = this.views.flatMap(v => v.slots.filter(t => t?.provider === 'codex').map(t => this.taskState(t)));
+      if (states.some(s => ['approval', 'question', 'awaiting_input'].includes(s))) return {performed: false, reason: 'codex-waiting-for-you'};
+      if (!states.some(s => CODEX_BUSY.includes(s))) return {performed: false, reason: 'no-codex-task-working'};
+      return this.sendShortcut('Escape', 'tap');
+    }
     const command = action === 'ptt' ? 'globalDictationHold' : action.slice(4);
     if (/^approval\./.test(command) && !this.views.some(v => v.slots.some(t => t?.provider === 'codex' && ['approval', 'awaiting_input'].includes(this.taskState(t)))))
       return {performed: false, reason: 'no-codex-approval-waiting'};

@@ -277,7 +277,10 @@ Codex's default (Back `Ctrl+[`, Forward `Ctrl+]`, sidebar `Ctrl+B`, new task
 `Ctrl+N`, Approve `Enter`, Decline `Escape`, and so on). It sends them only while the
 foreground window is the Codex app and no modifier key is held. Approve and Decline
 are sent only while a Codex task on the keys is waiting for approval, so `Enter`
-can't send a half-written prompt. Text keycaps type their text into Codex.
+can't send a half-written prompt. Codex has no stop command; Stop sends `Escape`,
+which interrupts the running turn, only while a Codex task on the keys is working
+and none is waiting for you (there, `Escape` would decline). Text keycaps type
+their text into Codex.
 
 Many Codex commands (fast mode, plan mode, reasoning effort, fork, push to talk)
 have no default shortcut. With *Let the bridge add Codex shortcuts* on (off by

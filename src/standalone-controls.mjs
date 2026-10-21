@@ -61,7 +61,7 @@ export class ControlDecoder {
 //   'ptt'        push to talk while the key is held
 //   'text:<t>'   write text in Codex's composer (Codex's :yolo: and :yeet: keycaps)
 //   'url:<u>'    open a web page (Codex's OAI keycap)
-//   'stop'       stop the running turn (Claude's Stop button)
+//   'stop'       stop the running turn (Claude's Stop button; Escape in Codex)
 export const BRIDGE = {
   prevTask: 'Previous task on this layer', nextTask: 'Next task on this layer', openTask: 'Open the selected task',
   nextAttention: 'Next task needing you', openApp: 'Open the app (Codex, Claude, or the one that last needed you)',
@@ -120,7 +120,8 @@ export function runs(action, provider, {codexKeys = () => false} = {}) {
   if (BRIDGE[action] !== undefined) return !(provider === 'codex' && action.startsWith('scroll'));
   if (action.startsWith('url:')) return true;
   if (provider === 'claude') return Boolean(CLAUDE[action.startsWith('cmd:') ? action.slice(4) : action]);
-  if (action === 'stop') return false;
+  // Codex has no stop command; Escape in its composer interrupts the turn.
+  if (action === 'stop') return true;
   if (action === 'ptt') return codexKeys('globalDictationHold');
   if (action.startsWith('text:')) return true;
   return action.startsWith('cmd:') && codexKeys(action.slice(4));
